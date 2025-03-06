@@ -1,6 +1,5 @@
 package com.chatapp.yahoochatapp;
 
-import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.scene.control.Button;
 import javafx.scene.control.PasswordField;
@@ -19,21 +18,13 @@ public class LoginController {
 
     @FXML
     private void initialize() {
-        loginButton.setOnAction(this::handleLogin);
-        signupButton.setOnAction(this::handleSignup);
     }
 
-    @FXML
-    private void handleLogin(ActionEvent event) {
         String username = usernameField.getText();
         String password = passwordField.getText();
-
         System.out.println("Login Attempt: " + username + " / " + password);
     }
 
-    private void handleSignup(ActionEvent event) {
         System.out.println("Redirecting to Signup...");
-        // Later, add signup screen navigation logic here
     }
-
 }
