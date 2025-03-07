@@ -6,7 +6,7 @@
 
 <GridPane xmlns:fx="http://javafx.com/fxml/1"
           fx:controller="com.chatapp.yahoochatapp.LoginController"
-          alignment="center" hgap="10" vgap="10">
+          alignment="center" hgap="10" vgap="15">
 
     <Label text="Username:" GridPane.columnIndex="0" GridPane.rowIndex="0"/>
     <TextField fx:id="usernameField" GridPane.columnIndex="1" GridPane.rowIndex="0"/>
@@ -14,6 +14,18 @@
     <Label text="Password:" GridPane.columnIndex="0" GridPane.rowIndex="1"/>
     <PasswordField fx:id="passwordField" GridPane.columnIndex="1" GridPane.rowIndex="1"/>
 
-    <Button text="Login" fx:id="loginButton" GridPane.columnIndex="0" GridPane.rowIndex="2"/>
-    <Button text="Sign Up" fx:id="signupButton" GridPane.columnIndex="1" GridPane.rowIndex="2"/>
+    <!-- Empty spacer row for extra space between password and login button -->
+    <Label text="" GridPane.columnIndex="1" GridPane.rowIndex="2"/>
+
+    <!-- Arrange buttons vertically with proper spacing -->
+    <Button text="Login" fx:id="loginButton" GridPane.columnIndex="1" GridPane.rowIndex="3" minWidth="120"/>
+
+    <!-- ✅ Fix: Bind Logout Button to handleLogout method -->
+    <Button text="Logout" fx:id="logoutButton" GridPane.columnIndex="1" GridPane.rowIndex="4" minWidth="120" onAction="#handleLogout"/>
+
+    <!-- Extra spacer row for better visual spacing -->
+    <Label text="" GridPane.columnIndex="1" GridPane.rowIndex="5"/>
+
+    <Button text="Sign Up" fx:id="signupButton" GridPane.columnIndex="1" GridPane.rowIndex="6" minWidth="120"/>
+
 </GridPane>
