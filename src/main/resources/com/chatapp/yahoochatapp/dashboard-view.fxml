@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<BorderPane xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="com.chatapp.yahoochatapp.DashboardController">
+
+    <top>
+        <Label text="Welcome to the Dashboard" style="-fx-font-size: 18px; -fx-font-weight: bold;"/>
+    </top>
+
+    <center>
+        <Button fx:id="logoutButton" text="Logout" onAction="#handleLogout"/>
+    </center>
+
+</BorderPane>

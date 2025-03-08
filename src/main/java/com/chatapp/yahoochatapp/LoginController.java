@@ -2,14 +2,21 @@ package com.chatapp.yahoochatapp;
 
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
+import javafx.fxml.FXMLLoader;
+import javafx.scene.Parent;
+import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextField;
+
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+
+import javafx.stage.Stage;
 import org.mindrot.jbcrypt.BCrypt;
 
 public class LoginController {
@@ -51,7 +58,8 @@ public class LoginController {
             // 🔥 Store the logged-in user in SessionManager
             SessionManager.setUser(username);
 
-            showAlert(Alert.AlertType.INFORMATION, "Login Successful", "Welcome, " + username + "!");
+            loadDashboard();
+
         } else {
             showAlert(Alert.AlertType.ERROR, "Login Failed", "Invalid username or password.");
         }
@@ -172,6 +180,23 @@ public class LoginController {
         // Debugging: Print session status
         System.out.println("User logged in? " + SessionManager.isUserLoggedIn());
     }
+
+
+    private void loadDashboard() {
+        try {
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/chatapp/yahoochatapp/dashboard-view.fxml"));
+            Parent root = loader.load();
+
+            // Get the current window
+            Stage stage = (Stage) loginButton.getScene().getWindow();
+            stage.setScene(new Scene(root));
+            stage.setTitle("Dashboard");
+        } catch (IOException e) {
+            e.printStackTrace();
+            showAlert(Alert.AlertType.ERROR, "Error", "Failed to load dashboard.");
+        }
+    }
+
 
 
 }
