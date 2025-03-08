@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<GridPane xmlns:fx="http://javafx.com/fxml/1"
+          fx:controller="com.chatapp.yahoochatapp.ProfileController"
+          alignment="center" hgap="10" vgap="15">
+
+    <Label text="Update Profile" GridPane.columnIndex="0" GridPane.rowIndex="0" GridPane.columnSpan="2"/>
+
+    <Label text="New Username:" GridPane.columnIndex="0" GridPane.rowIndex="1"/>
+    <TextField fx:id="newUsernameField" GridPane.columnIndex="1" GridPane.rowIndex="1"/>
+
+    <Label text="New Password:" GridPane.columnIndex="0" GridPane.rowIndex="2"/>
+    <PasswordField fx:id="newPasswordField" GridPane.columnIndex="1" GridPane.rowIndex="2"/>
+
+    <!-- ✅ Make both buttons the same width -->
+    <Button text="Update" fx:id="updateProfileButton" GridPane.columnIndex="0" GridPane.rowIndex="3" minWidth="120" onAction="#handleUpdateProfile"/>
+    <Button text="Back" fx:id="backButton" GridPane.columnIndex="1" GridPane.rowIndex="3" minWidth="120" onAction="#handleBack"/>
+
+</GridPane>

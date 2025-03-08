@@ -1,5 +1,6 @@
 package com.chatapp.yahoochatapp;
 
+import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
@@ -32,12 +33,18 @@ public class DashboardController {
 
             Stage loginStage = new Stage();
             loginStage.setTitle("Login - Chat App");
-            loginStage.setScene(new Scene(root, 400, 300)); // ✅ Set original size
+            loginStage.setScene(new Scene(root, 400, 800)); // ✅ Set original size
             loginStage.show();
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
+
+    @FXML
+    private void handleProfileSettings(ActionEvent event) {
+        SceneSwitcher.switchScene(event, "profile-view.fxml");
+    }
+
 
     private void showAlert(Alert.AlertType alertType, String title, String message) {
         Alert alert = new Alert(alertType);
