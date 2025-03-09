@@ -7,6 +7,7 @@ import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.control.Label;
 import javafx.stage.Stage;
 
 import java.io.IOException;
@@ -15,6 +16,20 @@ public class DashboardController {
 
     @FXML
     private Button logoutButton;
+
+    @FXML
+    private Label usernameLabel; // Link with FXML Label
+
+    @FXML
+    private void initialize() {
+        // Get current user from SessionManager and display it
+        String currentUser = SessionManager.getUser();
+        if (currentUser != null) {
+            usernameLabel.setText("Logged in as: " + currentUser);
+        } else {
+            usernameLabel.setText("Not logged in");
+        }
+    }
 
     @FXML
     private void handleLogout() {
@@ -26,7 +41,7 @@ public class DashboardController {
         Stage stage = (Stage) logoutButton.getScene().getWindow();
         stage.close();
 
-        // Load the login screen with the **original size** (400x300)
+        // Load the login screen with the **original size** (400x800)
         try {
             FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/chatapp/yahoochatapp/login-view.fxml"));
             Parent root = loader.load();

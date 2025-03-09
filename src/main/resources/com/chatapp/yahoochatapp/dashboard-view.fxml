@@ -5,18 +5,21 @@
 
 <BorderPane xmlns:fx="http://javafx.com/fxml/1"
             fx:controller="com.chatapp.yahoochatapp.DashboardController"
-            prefWidth="400" prefHeight="800">  <!-- ✅ Ensures correct screen size -->
+            prefWidth="400" prefHeight="800">
 
     <top>
-        <Label text="Welcome to the Dashboard"
-               style="-fx-font-size: 18px; -fx-font-weight: bold;"
-               BorderPane.alignment="CENTER"/>
+        <VBox spacing="10" alignment="CENTER">
+            <Label text="Welcome to the Dashboard"
+                   style="-fx-font-size: 18px; -fx-font-weight: bold;"/>
+            <Label fx:id="usernameLabel" text="Logged in as: "
+                   style="-fx-font-size: 14px; -fx-text-fill: gray;"/>
+        </VBox>
     </top>
 
     <center>
-        <VBox spacing="15" alignment="CENTER">  <!-- ✅ Added spacing for better layout -->
-            <Button text="Profile Settings" fx:id="profileButton" onAction="#handleProfileSettings" minWidth="140"/>
-            <Button text="Logout" fx:id="logoutButton" onAction="#handleLogout" minWidth="140"/>
+        <VBox spacing="10" alignment="CENTER">
+            <Button text="Profile Settings" fx:id="profileButton" onAction="#handleProfileSettings" minWidth="150"/>
+            <Button text="Logout" fx:id="logoutButton" onAction="#handleLogout" minWidth="150"/>
         </VBox>
     </center>
 
