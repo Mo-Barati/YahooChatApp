@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <?import javafx.scene.control.*?>
+<?import javafx.scene.image.ImageView?>
 <?import javafx.scene.layout.*?>
 
 <BorderPane xmlns:fx="http://javafx.com/fxml/1"
@@ -9,6 +10,9 @@
 
     <top>
         <VBox spacing="10" alignment="CENTER">
+            <!-- Profile Picture -->
+            <ImageView fx:id="profileImageView" fitWidth="100" fitHeight="100" preserveRatio="true"/>
+
             <Label text="Welcome to the Dashboard"
                    style="-fx-font-size: 18px; -fx-font-weight: bold;"/>
             <Label fx:id="usernameLabel" text="Logged in as: "

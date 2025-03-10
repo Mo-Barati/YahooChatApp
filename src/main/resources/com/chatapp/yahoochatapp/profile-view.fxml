@@ -2,6 +2,7 @@
 
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.*?>
+<?import javafx.scene.image.ImageView?>
 <?import javafx.scene.layout.*?>
 
 <GridPane xmlns:fx="http://javafx.com/fxml/1"
@@ -10,14 +11,18 @@
 
     <Label text="Update Profile" GridPane.columnIndex="0" GridPane.rowIndex="0" GridPane.columnSpan="2"/>
 
-    <Label text="New Username:" GridPane.columnIndex="0" GridPane.rowIndex="1"/>
-    <TextField fx:id="newUsernameField" GridPane.columnIndex="1" GridPane.rowIndex="1"/>
+    <!-- Profile Picture Section -->
+    <ImageView fx:id="profileImageView" fitWidth="100" fitHeight="100" GridPane.columnIndex="0" GridPane.rowIndex="1" GridPane.columnSpan="2"/>
+    <Button text="Upload Picture" fx:id="uploadPictureButton" GridPane.columnIndex="0" GridPane.rowIndex="2" GridPane.columnSpan="2" onAction="#handleUploadPicture"/>
 
-    <Label text="New Password:" GridPane.columnIndex="0" GridPane.rowIndex="2"/>
-    <PasswordField fx:id="newPasswordField" GridPane.columnIndex="1" GridPane.rowIndex="2"/>
+    <Label text="New Username:" GridPane.columnIndex="0" GridPane.rowIndex="3"/>
+    <TextField fx:id="newUsernameField" GridPane.columnIndex="1" GridPane.rowIndex="3"/>
+
+    <Label text="New Password:" GridPane.columnIndex="0" GridPane.rowIndex="4"/>
+    <PasswordField fx:id="newPasswordField" GridPane.columnIndex="1" GridPane.rowIndex="4"/>
 
     <!-- ✅ Make both buttons the same width -->
-    <Button text="Update" fx:id="updateProfileButton" GridPane.columnIndex="0" GridPane.rowIndex="3" minWidth="120" onAction="#handleUpdateProfile"/>
-    <Button text="Back" fx:id="backButton" GridPane.columnIndex="1" GridPane.rowIndex="3" minWidth="120" onAction="#handleBack"/>
+    <Button text="Update" fx:id="updateProfileButton" GridPane.columnIndex="0" GridPane.rowIndex="5" minWidth="120" onAction="#handleUpdateProfile"/>
+    <Button text="Back" fx:id="backButton" GridPane.columnIndex="1" GridPane.rowIndex="5" minWidth="120" onAction="#handleBack"/>
 
 </GridPane>

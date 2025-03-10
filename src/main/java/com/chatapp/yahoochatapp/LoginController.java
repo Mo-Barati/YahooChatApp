@@ -66,7 +66,8 @@ public class LoginController {
     }
 
     private boolean validateLogin(String username, String password) {
-        String query = "SELECT password FROM users WHERE username = ?";
+        // Fetch the profile picture from the database
+        String query = "SELECT password, profile_picture FROM users WHERE username = ?";
 
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(query)) {
@@ -74,19 +75,22 @@ public class LoginController {
             pstmt.setString(1, username);
             ResultSet rs = pstmt.executeQuery();
 
-            if (rs.next()) { // User found
+            if (rs.next()) { // If user exists
                 String storedHashedPassword = rs.getString("password");
+                String profilePicturePath = rs.getString("profile_picture"); // Retrieve profile pic
 
-                // Compare the hashed password with the entered plain text password
+                // Check password
                 if (BCrypt.checkpw(password, storedHashedPassword)) {
-                    return true; // Password matches
+                    SessionManager.setUser(username);
+                    SessionManager.setProfilePicture(profilePicturePath); // Store in session
+                    return true;
                 }
             }
         } catch (SQLException e) {
             e.printStackTrace();
         }
+        return false;
 
-        return false; // User not found or incorrect password
     }
 
     @FXML
