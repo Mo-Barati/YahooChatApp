@@ -14,6 +14,10 @@ import javafx.scene.layout.VBox;
 import javafx.util.Duration;
 
 import java.net.URL;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
@@ -32,7 +36,7 @@ public class ChatController {
 
     @FXML
     private void initialize() {
-        // Set padding for the input area manually (Keep this if needed)
+        // Set padding for the input area manually
         HBox inputArea = (HBox) messageField.getParent();
         if (inputArea != null) {
             inputArea.setPadding(new Insets(10, 10, 10, 10));
@@ -42,7 +46,7 @@ public class ChatController {
         ImageView sendIcon = new ImageView(new Image(getClass().getResource("/com/chatapp/yahoochatapp/icons/send_icon.png").toExternalForm()));
         sendIcon.setFitWidth(20);
         sendIcon.setFitHeight(20);
-        sendButton.setGraphic(sendIcon);  // Set the icon on the button
+        sendButton.setGraphic(sendIcon);
         sendButton.setText(null); // Remove the default text "Send"
 
         // Handle Enter Key events in TextArea
@@ -57,7 +61,65 @@ public class ChatController {
                 }
             }
         });
+
+        // ✅ Load chat history from the database
+        loadChatHistory();
     }
+
+    /**
+     * Retrieves chat history from the database and displays it in the ListView.
+     */
+    private void loadChatHistory() {
+        String query = "SELECT sender, message, timestamp FROM chat_messages ORDER BY id ASC";
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query);
+             ResultSet rs = pstmt.executeQuery()) {
+
+            while (rs.next()) {
+                String sender = rs.getString("sender");
+                String message = rs.getString("message");
+                String timestamp = rs.getString("timestamp");
+
+                Label messageLabel = new Label(message);
+                messageLabel.setWrapText(true);
+                messageLabel.setMaxWidth(250);
+
+                Label timeLabel = new Label(timestamp);
+                timeLabel.setStyle("-fx-font-size: 10px; -fx-text-fill: gray;");
+                timeLabel.setAlignment(Pos.BOTTOM_RIGHT);
+
+                VBox messageContainer = new VBox(messageLabel, timeLabel);
+
+                HBox messageBox = new HBox(messageContainer);
+
+                if ("Bot".equals(sender)) {
+                    // Bot messages (align left)
+                    messageLabel.setStyle("-fx-background-color: #E5E5EA; -fx-text-fill: black; -fx-padding: 10px; -fx-background-radius: 10;");
+                    messageContainer.setAlignment(Pos.BOTTOM_LEFT);
+                    messageBox.setAlignment(Pos.CENTER_LEFT);
+                    messageBox.setPadding(new Insets(5, 50, 5, 10));
+                } else {
+                    // User messages (align right)
+                    messageLabel.setStyle("-fx-background-color: #0078FF; -fx-text-fill: white; -fx-padding: 10px; -fx-background-radius: 10;");
+                    messageContainer.setAlignment(Pos.BOTTOM_RIGHT);
+                    messageBox.setAlignment(Pos.CENTER_RIGHT);
+                    messageBox.setPadding(new Insets(5, 10, 5, 50));
+                }
+
+                chatMessagesList.getItems().add(messageBox);
+            }
+
+            // Auto-scroll to the latest message
+            chatMessagesList.scrollTo(chatMessagesList.getItems().size() - 1);
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+
+
 
 
 
@@ -67,6 +129,9 @@ public class ChatController {
     private void handleSendMessage() {
         String message = messageField.getText().trim();
         if (!message.isEmpty()) {
+            // Get the current user (assume username is stored in SessionManager)
+            String sender = SessionManager.getUser();
+
             // Get current timestamp
             LocalDateTime now = LocalDateTime.now();
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("HH:mm");
@@ -95,13 +160,43 @@ public class ChatController {
             // Add to ListView
             chatMessagesList.getItems().add(messageBox);
 
+            // Auto-scroll to the latest message
+            chatMessagesList.scrollTo(chatMessagesList.getItems().size() - 1);
+
+            // Save message to the database ✅
+            saveMessageToDatabase(sender, message);
+
             // Simulate bot response
             simulateBotResponse();
 
-            messageField.clear(); // Clear input field
+            // Clear input field
+            messageField.clear();
         }
     }
 
+    /**
+     * Saves a chat message to the database.
+     */
+    private void saveMessageToDatabase(String sender, String message) {
+        String query = "INSERT INTO chat_messages (sender, message) VALUES (?, ?)";
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+
+            pstmt.setString(1, sender);
+            pstmt.setString(2, message);
+
+            int rowsInserted = pstmt.executeUpdate();
+            if (rowsInserted > 0) {
+                System.out.println("Message saved successfully.");
+            } else {
+                System.out.println("Failed to save message.");
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
 
     private void simulateBotResponse() {
         PauseTransition delay = new PauseTransition(Duration.seconds(1));
@@ -115,7 +210,7 @@ public class ChatController {
             Label botLabel = new Label("Hi there! 😊");
             botLabel.setStyle("-fx-background-color: #E5E5EA; -fx-text-fill: black; -fx-padding: 10px; -fx-background-radius: 10;");
             botLabel.setWrapText(true);
-            botLabel.setMaxWidth(250); // Limit width
+            botLabel.setMaxWidth(250);
 
             // Create timestamp label
             Label timeLabel = new Label(timestamp);
@@ -133,7 +228,11 @@ public class ChatController {
 
             // Add bot response to ListView
             chatMessagesList.getItems().add(botMessageBox);
+
+            // ✅ Save bot response to the database
+            saveMessageToDatabase("Bot", "Hi there! 😊");
         });
         delay.play();
     }
+
 }
