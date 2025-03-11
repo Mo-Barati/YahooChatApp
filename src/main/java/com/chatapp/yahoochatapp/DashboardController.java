@@ -10,8 +10,11 @@ import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.shape.Circle;
+import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
+import java.io.File;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -21,16 +24,17 @@ import java.sql.SQLException;
 public class DashboardController {
 
     @FXML
-    private Button logoutButton;
+    private Label usernameLabel;
 
     @FXML
-    private Label usernameLabel; // Link with FXML Label
+    private ImageView profileImageView; // Profile Image View
 
     @FXML
-    private ImageView profileImageView;
+    private Button uploadPictureButton; // Upload Button
 
     @FXML
     private void initialize() {
+        // Get the current logged-in user
         String currentUser = SessionManager.getUser();
         if (currentUser != null) {
             usernameLabel.setText("Logged in as: " + currentUser);
@@ -40,11 +44,13 @@ public class DashboardController {
         }
     }
 
+    // Method to load profile picture from database
     private void loadProfilePicture(String username) {
         String query = "SELECT profile_picture FROM users WHERE username = ?";
 
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(query)) {
+
             pstmt.setString(1, username);
             ResultSet rs = pstmt.executeQuery();
 
@@ -52,6 +58,7 @@ public class DashboardController {
                 String imagePath = rs.getString("profile_picture");
                 if (imagePath != null && !imagePath.isEmpty()) {
                     profileImageView.setImage(new Image(imagePath));
+                    applyCircularClip();  // Apply round frame after setting image
                 }
             }
         } catch (SQLException e) {
@@ -59,41 +66,73 @@ public class DashboardController {
         }
     }
 
+    // Handle Upload Picture from Dashboard
     @FXML
-    private void handleLogout() {
-        // Clear the current user session
-        SessionManager.clearSession();
-        showAlert(Alert.AlertType.INFORMATION, "Logout", "You have been logged out.");
+    private void handleUploadPicture(ActionEvent event) {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Choose Profile Picture");
+        fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Image Files", "*.png", "*.jpg", "*.jpeg"));
 
-        // Close the current dashboard window
-        Stage stage = (Stage) logoutButton.getScene().getWindow();
-        stage.close();
+        File selectedFile = fileChooser.showOpenDialog(null);
+        if (selectedFile != null) {
+            String imagePath = selectedFile.toURI().toString();
+            profileImageView.setImage(new Image(imagePath));
 
-        // Load the login screen with the **original size** (400x800)
-        try {
-            FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/chatapp/yahoochatapp/login-view.fxml"));
-            Parent root = loader.load();
+            // Save the image path to the database
+            updateProfilePicture(imagePath);
+        }
+    }
 
-            Stage loginStage = new Stage();
-            loginStage.setTitle("Login - Chat App");
-            loginStage.setScene(new Scene(root, 400, 800)); // ✅ Set original size
-            loginStage.show();
-        } catch (IOException e) {
+    // Update profile picture in the database
+    private void updateProfilePicture(String imagePath) {
+        String query = "UPDATE users SET profile_picture = ? WHERE username = ?";
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+
+            pstmt.setString(1, imagePath);
+            pstmt.setString(2, SessionManager.getUser());
+
+            int rowsUpdated = pstmt.executeUpdate();
+            if (rowsUpdated > 0) {
+                showAlert(Alert.AlertType.INFORMATION, "Success", "Profile picture updated successfully.");
+            } else {
+                showAlert(Alert.AlertType.ERROR, "Update Failed", "Could not update profile picture.");
+            }
+
+        } catch (SQLException e) {
             e.printStackTrace();
         }
     }
 
-    @FXML
-    private void handleProfileSettings(ActionEvent event) {
-        SceneSwitcher.switchScene(event, "profile-view.fxml");
-    }
-
-
+    // Show alert method
     private void showAlert(Alert.AlertType alertType, String title, String message) {
         Alert alert = new Alert(alertType);
         alert.setTitle(title);
         alert.setHeaderText(null);
         alert.setContentText(message);
         alert.showAndWait();
+    }
+
+    // Handle Logout
+    @FXML
+    private void handleLogout(ActionEvent event) {
+        SessionManager.clearSession();
+        showAlert(Alert.AlertType.INFORMATION, "Logout", "You have been logged out.");
+        SceneSwitcher.switchScene(event, "login-view.fxml");
+    }
+
+    // Handle Profile Settings Navigation
+    @FXML
+    private void handleProfileSettings(ActionEvent event) {
+        SceneSwitcher.switchScene(event, "profile-view.fxml");
+    }
+
+    private void applyCircularClip() {
+        double radius = Math.min(profileImageView.getFitWidth(), profileImageView.getFitHeight()) / 2;
+        Circle clip = new Circle(radius);
+        clip.setCenterX(profileImageView.getFitWidth() / 2);
+        clip.setCenterY(profileImageView.getFitHeight() / 2);
+        profileImageView.setClip(clip);
     }
 }
