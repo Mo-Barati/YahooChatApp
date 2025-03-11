@@ -11,14 +11,14 @@
     <!-- Chat Area -->
     <center>
         <VBox spacing="10" alignment="CENTER">
-            <ListView fx:id="chatMessagesList" prefHeight="450"/>  <!-- Chat Messages -->
+            <ListView fx:id="chatMessagesList" prefHeight="450"/> <!-- Chat Messages -->
         </VBox>
     </center>
 
     <!-- Input Area -->
     <bottom>
         <HBox spacing="10" alignment="CENTER">
-            <TextField fx:id="messageField" promptText="Type a message..." HBox.hgrow="ALWAYS"/>
+            <TextArea fx:id="messageField" promptText="Type a message..." wrapText="true" HBox.hgrow="ALWAYS" prefRowCount="2"/>
             <Button text="Send" fx:id="sendButton" onAction="#handleSendMessage"/>
         </HBox>
     </bottom>
