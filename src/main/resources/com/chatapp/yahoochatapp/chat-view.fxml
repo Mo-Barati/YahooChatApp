@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <?import javafx.scene.control.*?>
+<?import javafx.scene.image.*?>
 <?import javafx.scene.layout.*?>
 <?import javafx.geometry.Insets?>  <!-- ✅ Import Insets -->
 
@@ -19,8 +20,17 @@
     <bottom>
         <HBox spacing="10" alignment="CENTER">
             <TextArea fx:id="messageField" promptText="Type a message..." wrapText="true" HBox.hgrow="ALWAYS" prefRowCount="2"/>
-            <Button text="Send" fx:id="sendButton" onAction="#handleSendMessage"/>
+
+            <!-- Button with Send Icon -->
+            <Button fx:id="sendButton" onAction="#handleSendMessage">
+                <graphic>
+                    <ImageView fitWidth="20" fitHeight="20">
+                        <image>
+                            <Image url="@icons/send_icon.png"/>
+                        </image>
+                    </ImageView>
+                </graphic>
+            </Button>
         </HBox>
     </bottom>
 </BorderPane>
-
