@@ -83,6 +83,21 @@ public class DashboardController {
         }
     }
 
+    @FXML
+    private void handleOpenChat(ActionEvent event) {
+        try {
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("chat-view.fxml"));
+            Parent root = loader.load();
+
+            Stage stage = new Stage();
+            stage.setTitle("Chat Window");
+            stage.setScene(new Scene(root, 400, 600));
+            stage.show();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
     // Update profile picture in the database
     private void updateProfilePicture(String imagePath) {
         String query = "UPDATE users SET profile_picture = ? WHERE username = ?";

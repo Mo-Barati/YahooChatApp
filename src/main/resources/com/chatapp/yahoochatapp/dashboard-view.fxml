@@ -22,6 +22,7 @@
     <center>
         <VBox spacing="10" alignment="CENTER">
             <Button text="Profile Settings" fx:id="profileButton" onAction="#handleProfileSettings" minWidth="150"/>
+            <Button text="Open Chat" fx:id="openChatButton" onAction="#handleOpenChat" minWidth="150"/>  <!-- Added Open Chat Button -->
             <Button text="Logout" fx:id="logoutButton" onAction="#handleLogout" minWidth="150"/>
         </VBox>
     </center>
