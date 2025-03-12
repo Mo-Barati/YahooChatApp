@@ -100,44 +100,24 @@ public class ChatController {
              PreparedStatement pstmt = conn.prepareStatement(query);
              ResultSet rs = pstmt.executeQuery()) {
 
+            boolean hasMessages = false; // To track if there are messages
+
             while (rs.next()) {
+                hasMessages = true; // At least one message exists
+
                 int messageId = rs.getInt("id"); // ✅ Get message ID
                 String sender = rs.getString("sender");
                 String message = rs.getString("message");
                 String timestamp = rs.getString("timestamp");
                 String status = rs.getString("status");
 
-                Label messageLabel = new Label(message);
-                messageLabel.setWrapText(true);
-                messageLabel.setMaxWidth(250);
-
-                Label timeLabel = new Label(timestamp);
-                timeLabel.setStyle("-fx-font-size: 10px; -fx-text-fill: gray;");
-                timeLabel.setAlignment(Pos.BOTTOM_RIGHT);
-
-                // ✅ Add status label
-                Label statusLabel = new Label(status);
-                statusLabel.setStyle("-fx-font-size: 10px; -fx-text-fill: gray;");
-
-                VBox messageContainer = new VBox(messageLabel, timeLabel, statusLabel);
-                HBox messageBox = new HBox(messageContainer);
-
-                if ("Bot".equals(sender)) {
-                    // Bot messages (align left)
-                    messageLabel.setStyle("-fx-background-color: #E5E5EA; -fx-text-fill: black; -fx-padding: 10px; -fx-background-radius: 10;");
-                    messageContainer.setAlignment(Pos.BOTTOM_LEFT);
-                    messageBox.setAlignment(Pos.CENTER_LEFT);
-                    messageBox.setPadding(new Insets(5, 50, 5, 10));
-                } else {
-                    // User messages (align right)
-                    messageLabel.setStyle("-fx-background-color: #0078FF; -fx-text-fill: white; -fx-padding: 10px; -fx-background-radius: 10;");
-                    messageContainer.setAlignment(Pos.BOTTOM_RIGHT);
-                    messageBox.setAlignment(Pos.CENTER_RIGHT);
-                    messageBox.setPadding(new Insets(5, 10, 5, 50));
-                }
+                // ✅ FIX: Correct method call (ensure `allowEdit` is a boolean)
+                HBox messageBox = createMessageUI(messageId, sender, message, timestamp, status, true);
 
                 // ✅ Attach context menu with message ID
-                addContextMenu(messageBox, messageId, sender, message, messageLabel);
+                addContextMenu(messageBox, messageId, sender, message,
+                        (Label) ((VBox) messageBox.getChildren().get(0)).getChildren().get(0)
+                );
 
                 chatMessagesList.getItems().add(messageBox);
 
@@ -147,13 +127,21 @@ public class ChatController {
                 }
             }
 
-            // Auto-scroll to the latest message
+            // ✅ If no messages exist, show a placeholder
+            if (!hasMessages) {
+                Label placeholderLabel = new Label("No messages yet...");
+                placeholderLabel.setStyle("-fx-font-size: 14px; -fx-text-fill: gray; -fx-padding: 20px;");
+                chatMessagesList.getItems().add(new HBox(placeholderLabel));
+            }
+
+            // ✅ Auto-scroll to the latest message
             chatMessagesList.scrollTo(chatMessagesList.getItems().size() - 1);
 
         } catch (SQLException e) {
             e.printStackTrace();
         }
     }
+
 
     /**
      * ✅ Marks a message as "Seen" in the database.
@@ -182,6 +170,7 @@ public class ChatController {
 
             // Create message UI (Pass -1 as a placeholder for the message ID)
             HBox messageBox = createMessageUI(-1, sender, message, timestamp, "Sent", true);
+
             chatMessagesList.getItems().add(messageBox);
 
             // Auto-scroll to the latest message
@@ -261,6 +250,7 @@ public class ChatController {
 
         return messageBox;
     }
+
 
     /**
      * ✅ Allows users to edit their message
