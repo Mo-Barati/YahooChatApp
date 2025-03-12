@@ -67,19 +67,47 @@ public class ChatController {
     }
 
     /**
+     * Shows a typing indicator in the chat.
+     */
+    private void showTypingIndicator() {
+        Label typingLabel = new Label("Bot is typing...");
+        typingLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: gray; -fx-padding: 5px;");
+
+        HBox typingBox = new HBox(typingLabel);
+        typingBox.setAlignment(Pos.CENTER_LEFT);
+        typingBox.setPadding(new Insets(5, 50, 5, 10));
+
+        chatMessagesList.getItems().add(typingBox);
+
+        // Auto-scroll to show typing indicator
+        chatMessagesList.scrollTo(chatMessagesList.getItems().size() - 1);
+
+        // Schedule the removal after 1 second (before bot response)
+        PauseTransition delay = new PauseTransition(Duration.seconds(1));
+        delay.setOnFinished(event -> {
+            chatMessagesList.getItems().remove(typingBox);
+            simulateBotResponse(); // Trigger the bot response after the delay
+        });
+        delay.play();
+    }
+
+
+    /**
      * Retrieves chat history from the database and displays it in the ListView.
      */
     private void loadChatHistory() {
-        String query = "SELECT sender, message, timestamp FROM chat_messages ORDER BY id ASC";
+        String query = "SELECT id, sender, message, timestamp, status FROM chat_messages ORDER BY id ASC";
 
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(query);
              ResultSet rs = pstmt.executeQuery()) {
 
             while (rs.next()) {
+                int messageId = rs.getInt("id");
                 String sender = rs.getString("sender");
                 String message = rs.getString("message");
                 String timestamp = rs.getString("timestamp");
+                String status = rs.getString("status");
 
                 Label messageLabel = new Label(message);
                 messageLabel.setWrapText(true);
@@ -89,8 +117,11 @@ public class ChatController {
                 timeLabel.setStyle("-fx-font-size: 10px; -fx-text-fill: gray;");
                 timeLabel.setAlignment(Pos.BOTTOM_RIGHT);
 
-                VBox messageContainer = new VBox(messageLabel, timeLabel);
+                // ✅ Add status label
+                Label statusLabel = new Label(status);
+                statusLabel.setStyle("-fx-font-size: 10px; -fx-text-fill: gray;");
 
+                VBox messageContainer = new VBox(messageLabel, timeLabel, statusLabel);
                 HBox messageBox = new HBox(messageContainer);
 
                 if ("Bot".equals(sender)) {
@@ -108,6 +139,11 @@ public class ChatController {
                 }
 
                 chatMessagesList.getItems().add(messageBox);
+
+                // ✅ If message is "Delivered", update it to "Seen"
+                if (!"Seen".equals(status)) {
+                    markMessageAsSeen(messageId);
+                }
             }
 
             // Auto-scroll to the latest message
@@ -118,11 +154,20 @@ public class ChatController {
         }
     }
 
+    /**
+     * ✅ Marks a message as "Seen" in the database.
+     */
+    private void markMessageAsSeen(int messageId) {
+        String updateQuery = "UPDATE chat_messages SET status = 'Seen' WHERE id = ?";
 
-
-
-
-
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(updateQuery)) {
+            pstmt.setInt(1, messageId);
+            pstmt.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
 
 
     @FXML
@@ -166,19 +211,20 @@ public class ChatController {
             // Save message to the database ✅
             saveMessageToDatabase(sender, message);
 
-            // Simulate bot response
-            simulateBotResponse();
-
             // Clear input field
             messageField.clear();
+
+            // ✅ Show typing indicator before bot response
+            showTypingIndicator();
         }
     }
+
 
     /**
      * Saves a chat message to the database.
      */
     private void saveMessageToDatabase(String sender, String message) {
-        String query = "INSERT INTO chat_messages (sender, message) VALUES (?, ?)";
+        String query = "INSERT INTO chat_messages (sender, message, status) VALUES (?, ?, 'Sent')";
 
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(query)) {
@@ -198,6 +244,8 @@ public class ChatController {
         }
     }
 
+
+
     private void simulateBotResponse() {
         PauseTransition delay = new PauseTransition(Duration.seconds(1));
         delay.setOnFinished(event -> {
@@ -207,7 +255,8 @@ public class ChatController {
             String timestamp = now.format(formatter);
 
             // Create bot message
-            Label botLabel = new Label("Hi there! 😊");
+            String botMessage = "Hi there! 😊";
+            Label botLabel = new Label(botMessage);
             botLabel.setStyle("-fx-background-color: #E5E5EA; -fx-text-fill: black; -fx-padding: 10px; -fx-background-radius: 10;");
             botLabel.setWrapText(true);
             botLabel.setMaxWidth(250);
@@ -229,10 +278,15 @@ public class ChatController {
             // Add bot response to ListView
             chatMessagesList.getItems().add(botMessageBox);
 
-            // ✅ Save bot response to the database
-            saveMessageToDatabase("Bot", "Hi there! 😊");
+            // ✅ Save bot message to database
+            saveMessageToDatabase("Bot", botMessage);
+
+            // ✅ Auto-scroll to latest message
+            chatMessagesList.scrollTo(chatMessagesList.getItems().size() - 1);
         });
         delay.play();
     }
+
+
 
 }
