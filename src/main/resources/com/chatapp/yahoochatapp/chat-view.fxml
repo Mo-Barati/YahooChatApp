@@ -3,16 +3,25 @@
 <?import javafx.scene.control.*?>
 <?import javafx.scene.image.*?>
 <?import javafx.scene.layout.*?>
-<?import javafx.geometry.Insets?>  <!-- ✅ Import Insets -->
+<?import javafx.geometry.Insets?>
 
 <BorderPane xmlns:fx="http://javafx.com/fxml/1"
             fx:controller="com.chatapp.yahoochatapp.ChatController"
             prefWidth="400" prefHeight="600">
 
+    <!-- Friend List Sidebar -->
+    <left>
+        <VBox spacing="10" alignment="CENTER" prefWidth="150">
+            <Label text="Friends List" style="-fx-font-weight: bold;"/>
+            <ListView fx:id="friendsList" prefHeight="550"/>
+            <Button fx:id="addFriendButton" text="Add Friend" onAction="#handleAddFriend"/>
+        </VBox>
+    </left>
+
     <!-- Chat Area -->
     <center>
         <VBox spacing="10" alignment="CENTER">
-            <ListView fx:id="chatMessagesList" prefHeight="450"/> <!-- Chat Messages -->
+            <ListView fx:id="chatMessagesList" prefHeight="450"/>
         </VBox>
     </center>
 
@@ -21,7 +30,7 @@
         <HBox spacing="10" alignment="CENTER">
             <TextArea fx:id="messageField" promptText="Type a message..." wrapText="true" HBox.hgrow="ALWAYS" prefRowCount="2"/>
 
-            <!-- Button with Send Icon -->
+            <!-- Send Button with Icon -->
             <Button fx:id="sendButton" onAction="#handleSendMessage">
                 <graphic>
                     <ImageView fitWidth="20" fitHeight="20">

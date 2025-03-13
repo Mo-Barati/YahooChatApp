@@ -28,40 +28,296 @@ public class ChatController {
     private ListView<Node> chatMessagesList;
 
     @FXML
+    private ListView<String> friendsList; // ✅ Added Friend List UI
+
+    @FXML
     private TextArea messageField;
 
     @FXML
     private Button sendButton;
 
+    @FXML
+    private Button addFriendButton; // ✅ Button to add friends
+
 
 
     @FXML
     private void initialize() {
-        HBox inputArea = (HBox) messageField.getParent();
-        if (inputArea != null) {
-            inputArea.setPadding(new Insets(10, 10, 10, 10));
+        // ✅ Ensure all UI components are properly initialized
+        if (messageField == null || sendButton == null || friendsList == null || addFriendButton == null) {
+            System.err.println("UI components are not properly initialized!");
+            return;
         }
 
-        // Set send button icon
-        ImageView sendIcon = new ImageView(new Image(getClass().getResource("/com/chatapp/yahoochatapp/icons/send_icon.png").toExternalForm()));
-        sendIcon.setFitWidth(20);
-        sendIcon.setFitHeight(20);
-        sendButton.setGraphic(sendIcon);
-        sendButton.setText(null);
+        // ✅ Set padding for input area
+        HBox inputArea = (HBox) messageField.getParent();
+        if (inputArea != null) {
+            inputArea.setPadding(new Insets(10));
+        }
 
-        // Handle Enter Key events in TextArea
+        // ✅ Set send button icon with error handling
+        try {
+            Image sendImage = new Image(getClass().getResource("/com/chatapp/yahoochatapp/icons/send_icon.png").toExternalForm());
+            ImageView sendIcon = new ImageView(sendImage);
+            sendIcon.setFitWidth(20);
+            sendIcon.setFitHeight(20);
+            sendButton.setGraphic(sendIcon);
+            sendButton.setText(null);
+        } catch (Exception e) {
+            System.err.println("Error loading send icon: " + e.getMessage());
+        }
+
+        // ✅ Handle Enter Key events in TextArea
         messageField.setOnKeyPressed(event -> {
             if (event.getCode() == KeyCode.ENTER) {
                 if (event.isShiftDown()) {
-                    messageField.appendText("\n");
+                    messageField.appendText("\n"); // Move to the next line
                 } else {
-                    event.consume();
+                    event.consume(); // Prevent default behavior (message sending)
                 }
             }
         });
 
-        // Load chat history from the database
+        // ✅ Load chat history
         loadChatHistory();
+
+        // ✅ Load friends list
+        loadFriendList();
+
+        // ✅ Set action for adding friends
+        addFriendButton.setOnAction(event -> promptAddFriend());
+
+        // ✅ Print success message (for debugging)
+        System.out.println("Chat UI initialized successfully!");
+    }
+
+
+
+    /**
+     * ✅ Loads the friend list from the database
+     */
+    private void loadFriendList() {
+        String query = "SELECT friend FROM friends WHERE user = ?";
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+
+            pstmt.setString(1, SessionManager.getUser());
+            ResultSet rs = pstmt.executeQuery();
+
+            friendsList.getItems().clear(); // Clear before adding new ones
+
+            boolean hasFriends = false;
+            while (rs.next()) {
+                String friend = rs.getString("friend");
+                friendsList.getItems().add(friend);
+                hasFriends = true;
+                System.out.println("Loaded Friend: " + friend);
+            }
+
+            if (!hasFriends) {
+                System.out.println("No friends found in the database.");
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * ✅ Opens a dialog to add a new friend
+     */
+    private void promptAddFriend() {
+        TextInputDialog dialog = new TextInputDialog();
+        dialog.setTitle("Add Friend");
+        dialog.setHeaderText("Enter your friend's username:");
+        dialog.setContentText("Username:");
+
+        dialog.showAndWait().ifPresent(friendUsername -> {
+            if (!friendUsername.trim().isEmpty()) {
+                addFriend(friendUsername.trim());
+            }
+        });
+    }
+
+    /**
+     * ✅ Adds a friend request to the database
+     */
+    private void addFriend(String friendUsername) {
+        String query = "INSERT INTO friends (user, friend, status) VALUES (?, ?, 'Pending')";
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+
+            pstmt.setString(1, SessionManager.getUser());
+            pstmt.setString(2, friendUsername);
+
+            int rowsInserted = pstmt.executeUpdate();
+
+            if (rowsInserted > 0) {
+                System.out.println("Friend request sent!");
+            } else {
+                System.out.println("Failed to send friend request.");
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * ✅ Removes a friend from the database
+     */
+    private void removeFriend(String friendUsername) {
+        String query = "DELETE FROM friends WHERE user = ? AND friend = ?";
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+
+            pstmt.setString(1, SessionManager.getUser());
+            pstmt.setString(2, friendUsername);
+
+            int rowsDeleted = pstmt.executeUpdate();
+
+            if (rowsDeleted > 0) {
+                System.out.println(friendUsername + " removed from friend list.");
+                loadFriendList(); // Refresh friend list
+            } else {
+                System.out.println("Failed to remove friend.");
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    @FXML
+    private void handleAddFriend() {
+        TextInputDialog dialog = new TextInputDialog();
+        dialog.setTitle("Add Friend");
+        dialog.setHeaderText("Enter friend's username:");
+        dialog.setContentText("Username:");
+
+        dialog.showAndWait().ifPresent(friend -> {
+            if (!friend.trim().isEmpty()) {
+                addFriendToDatabase(friend);
+                loadFriendList(); // Refresh the list
+            }
+        });
+    }
+
+    private void addFriendToDatabase(String friendUsername) {
+        String checkQuery = "SELECT * FROM friends WHERE user = ? AND friend = ?";
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement checkStmt = conn.prepareStatement(checkQuery)) {
+
+            checkStmt.setString(1, SessionManager.getUser());
+            checkStmt.setString(2, friendUsername);
+            ResultSet rs = checkStmt.executeQuery();
+
+            if (rs.next()) {
+                System.out.println("Friend already exists: " + friendUsername);
+                return; // Stop execution if friend already exists
+            }
+
+            // If friend doesn't exist, insert them
+            String insertQuery = "INSERT INTO friends (user, friend, status) VALUES (?, ?, 'Accepted')";
+            try (PreparedStatement insertStmt = conn.prepareStatement(insertQuery)) {
+                insertStmt.setString(1, SessionManager.getUser());
+                insertStmt.setString(2, friendUsername);
+                int rowsInserted = insertStmt.executeUpdate();
+
+                if (rowsInserted > 0) {
+                    System.out.println("Friend added successfully: " + friendUsername);
+                    loadFriendList(); // Refresh the list
+                } else {
+                    System.out.println("Failed to add friend.");
+                }
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void removeFriendFromDatabase(String friend) {
+        String currentUser = SessionManager.getUser();
+        String query = "DELETE FROM friends WHERE user = ? AND friend = ?";
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+            pstmt.setString(1, currentUser);
+            pstmt.setString(2, friend);
+            pstmt.executeUpdate();
+            System.out.println(friend + " removed from friend list.");
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * ✅ Accepts a pending friend request
+     */
+    private void acceptFriendRequest(String friendUsername) {
+        String query = "UPDATE friends SET status = 'Accepted' WHERE user = ? AND friend = ?";
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+
+            pstmt.setString(1, SessionManager.getUser());
+            pstmt.setString(2, friendUsername);
+
+            int rowsUpdated = pstmt.executeUpdate();
+
+            if (rowsUpdated > 0) {
+                System.out.println("Friend request accepted.");
+                loadFriendList(); // Refresh friend list
+            } else {
+                System.out.println("Failed to accept friend request.");
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * ✅ Loads pending friend requests
+     */
+    private void loadPendingRequests() {
+        String query = "SELECT user FROM friends WHERE friend = ? AND status = 'Pending'";
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+
+            pstmt.setString(1, SessionManager.getUser());
+            ResultSet rs = pstmt.executeQuery();
+
+            while (rs.next()) {
+                String requester = rs.getString("user");
+                System.out.println("Pending request from: " + requester);
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * ✅ Displays a context menu for removing a friend
+     */
+    private void showFriendContextMenu(String friendUsername) {
+        ContextMenu contextMenu = new ContextMenu();
+
+        MenuItem removeItem = new MenuItem("Remove Friend");
+        removeItem.setOnAction(event -> removeFriend(friendUsername));
+
+        contextMenu.getItems().add(removeItem);
+
+        friendsList.setOnContextMenuRequested(event -> {
+            contextMenu.show(friendsList, event.getScreenX(), event.getScreenY());
+        });
     }
 
     /**
