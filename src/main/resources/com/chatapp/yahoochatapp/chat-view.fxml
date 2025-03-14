@@ -14,7 +14,10 @@
         <VBox spacing="10" alignment="CENTER" prefWidth="150">
             <Label text="Friends List" style="-fx-font-weight: bold;"/>
             <ListView fx:id="friendsList" prefHeight="550"/>
-            <Button fx:id="addFriendButton" text="Add Friend" onAction="#handleAddFriend"/>
+            <HBox spacing="5">
+                <Button fx:id="addFriendButton" text="Add Friend" onAction="#handleAddFriend"/>
+                <Button fx:id="removeFriendButton" text="Remove" onAction="#handleRemoveFriend"/>
+            </HBox>
         </VBox>
     </left>
 

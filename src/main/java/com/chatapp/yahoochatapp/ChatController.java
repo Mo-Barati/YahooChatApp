@@ -21,6 +21,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.HashSet;
+import java.util.Set;
 
 public class ChatController {
 
@@ -94,35 +96,36 @@ public class ChatController {
 
 
     /**
-     * ✅ Loads the friend list from the database
+     * ✅ Loads the user's friend list from the database and ensures no duplicates in the UI.
      */
     private void loadFriendList() {
-        String query = "SELECT friend FROM friends WHERE user = ?";
+        String currentUser = SessionManager.getUser();
+        String query = "SELECT friend FROM friends WHERE user = ? ORDER BY friend";
 
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(query)) {
 
-            pstmt.setString(1, SessionManager.getUser());
+            pstmt.setString(1, currentUser);
             ResultSet rs = pstmt.executeQuery();
 
-            friendsList.getItems().clear(); // Clear before adding new ones
+            // ✅ Use a HashSet to avoid duplicate entries
+            Set<String> uniqueFriends = new HashSet<>();
+            friendsList.getItems().clear(); // Clear existing list before adding new items
 
-            boolean hasFriends = false;
             while (rs.next()) {
                 String friend = rs.getString("friend");
-                friendsList.getItems().add(friend);
-                hasFriends = true;
-                System.out.println("Loaded Friend: " + friend);
-            }
 
-            if (!hasFriends) {
-                System.out.println("No friends found in the database.");
+                if (!uniqueFriends.contains(friend)) { // ✅ Avoid duplicates
+                    uniqueFriends.add(friend);
+                    friendsList.getItems().add(friend);
+                }
             }
 
         } catch (SQLException e) {
             e.printStackTrace();
         }
     }
+
 
     /**
      * ✅ Opens a dialog to add a new friend
@@ -192,6 +195,36 @@ public class ChatController {
     }
 
     @FXML
+    private void handleRemoveFriend() {
+        String selectedFriend = friendsList.getSelectionModel().getSelectedItem();
+
+        if (selectedFriend == null) {
+            showAlert("No Friend Selected", "Please select a friend to remove.");
+            return;
+        }
+
+        // Confirm before deleting
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+        confirm.setTitle("Confirm Removal");
+        confirm.setHeaderText("Are you sure you want to remove " + selectedFriend + "?");
+        confirm.setContentText("This action cannot be undone.");
+
+        confirm.showAndWait().ifPresent(response -> {
+            if (response == ButtonType.OK) {
+                removeFriend(selectedFriend);
+            }
+        });
+    }
+
+    private void showAlert(String title, String content) {
+        Alert alert = new Alert(Alert.AlertType.WARNING);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(content);
+        alert.showAndWait();
+    }
+
+    @FXML
     private void handleAddFriend() {
         TextInputDialog dialog = new TextInputDialog();
         dialog.setTitle("Add Friend");
@@ -241,20 +274,7 @@ public class ChatController {
         }
     }
 
-    private void removeFriendFromDatabase(String friend) {
-        String currentUser = SessionManager.getUser();
-        String query = "DELETE FROM friends WHERE user = ? AND friend = ?";
 
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(query)) {
-            pstmt.setString(1, currentUser);
-            pstmt.setString(2, friend);
-            pstmt.executeUpdate();
-            System.out.println(friend + " removed from friend list.");
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-    }
 
     /**
      * ✅ Accepts a pending friend request
