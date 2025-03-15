@@ -45,19 +45,16 @@ public class ChatController {
 
     @FXML
     private void initialize() {
-        // ✅ Ensure all UI components are properly initialized
         if (messageField == null || sendButton == null || friendsList == null || addFriendButton == null) {
             System.err.println("UI components are not properly initialized!");
             return;
         }
 
-        // ✅ Set padding for input area
         HBox inputArea = (HBox) messageField.getParent();
         if (inputArea != null) {
             inputArea.setPadding(new Insets(10));
         }
 
-        // ✅ Set send button icon with error handling
         try {
             Image sendImage = new Image(getClass().getResource("/com/chatapp/yahoochatapp/icons/send_icon.png").toExternalForm());
             ImageView sendIcon = new ImageView(sendImage);
@@ -69,57 +66,76 @@ public class ChatController {
             System.err.println("Error loading send icon: " + e.getMessage());
         }
 
-        // ✅ Handle Enter Key events in TextArea
         messageField.setOnKeyPressed(event -> {
             if (event.getCode() == KeyCode.ENTER) {
                 if (event.isShiftDown()) {
-                    messageField.appendText("\n"); // Move to the next line
+                    messageField.appendText("\n");
                 } else {
-                    event.consume(); // Prevent default behavior (message sending)
+                    event.consume();
                 }
             }
         });
 
-        // ✅ Load chat history
         loadChatHistory();
-
-        // ✅ Load friends list
         loadFriendList();
+        loadPendingRequests(); // ✅ Check for pending friend requests
 
-        // ✅ Set action for adding friends
         addFriendButton.setOnAction(event -> promptAddFriend());
 
-        // ✅ Print success message (for debugging)
         System.out.println("Chat UI initialized successfully!");
     }
 
-
-
     /**
-     * ✅ Loads the user's friend list from the database and ensures no duplicates in the UI.
+     * ✅ Loads the user's friend list from the database and marks outgoing friend requests.
      */
     private void loadFriendList() {
         String currentUser = SessionManager.getUser();
-        String query = "SELECT friend FROM friends WHERE user = ? ORDER BY friend";
+        String query = "SELECT user, friend, status FROM friends WHERE user = ? OR friend = ? ORDER BY friend";
 
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(query)) {
 
             pstmt.setString(1, currentUser);
+            pstmt.setString(2, currentUser);
             ResultSet rs = pstmt.executeQuery();
 
-            // ✅ Use a HashSet to avoid duplicate entries
             Set<String> uniqueFriends = new HashSet<>();
-            friendsList.getItems().clear(); // Clear existing list before adding new items
+            friendsList.getItems().clear(); // ✅ Clear old list
 
             while (rs.next()) {
+                String user = rs.getString("user");
                 String friend = rs.getString("friend");
+                String status = rs.getString("status");
 
-                if (!uniqueFriends.contains(friend)) { // ✅ Avoid duplicates
-                    uniqueFriends.add(friend);
-                    friendsList.getItems().add(friend);
+                String displayName;
+                if (user.equals(currentUser)) {
+                    // ✅ If the logged-in user sent the request, show "Requested"
+                    displayName = isPendingRequest(currentUser, friend) ? friend + " (Requested)" : friend;
+                } else {
+                    // ✅ If the logged-in user received the request, show "Pending Request"
+                    displayName = isPendingRequest(user, currentUser) ? user + " (Pending Request)" : user;
+                }
+
+                if (!uniqueFriends.contains(displayName)) {
+                    uniqueFriends.add(displayName);
+                    friendsList.getItems().add(displayName);
                 }
             }
+
+            // ✅ Attach the context menu for right-click options
+            friendsList.setCellFactory(lv -> new ListCell<>() {
+                @Override
+                protected void updateItem(String friend, boolean empty) {
+                    super.updateItem(friend, empty);
+                    if (empty || friend == null) {
+                        setText(null);
+                        setContextMenu(null);
+                    } else {
+                        setText(friend);
+                        showFriendContextMenu(this, friend); // ✅ Attach context menu
+                    }
+                }
+            });
 
         } catch (SQLException e) {
             e.printStackTrace();
@@ -127,20 +143,45 @@ public class ChatController {
     }
 
 
+
     /**
-     * ✅ Opens a dialog to add a new friend
+     * ✅ Prompts the user to enter a friend's username and sends a friend request.
      */
     private void promptAddFriend() {
         TextInputDialog dialog = new TextInputDialog();
         dialog.setTitle("Add Friend");
-        dialog.setHeaderText("Enter your friend's username:");
+        dialog.setHeaderText("Enter the username of the friend you want to add:");
         dialog.setContentText("Username:");
 
         dialog.showAndWait().ifPresent(friendUsername -> {
-            if (!friendUsername.trim().isEmpty()) {
-                addFriend(friendUsername.trim());
+            if (!friendUsername.trim().isEmpty() && !friendUsername.equals(SessionManager.getUser())) {
+                sendFriendRequest(friendUsername);
+                loadFriendList(); // ✅ Refresh list immediately after adding
+            } else {
+                System.out.println("Invalid username.");
             }
         });
+    }
+
+    /**
+     * ✅ Sends a friend request to another user and updates UI immediately.
+     */
+    private void sendFriendRequest(String friendUsername) {
+        String query = "INSERT INTO friends (user, friend, status) VALUES (?, ?, 'Pending')";
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+
+            pstmt.setString(1, SessionManager.getUser());
+            pstmt.setString(2, friendUsername);
+            pstmt.executeUpdate();
+
+            System.out.println("Friend request sent to " + friendUsername);
+            loadFriendList(); // ✅ Refresh UI immediately
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
     }
 
     /**
@@ -277,22 +318,22 @@ public class ChatController {
 
 
     /**
-     * ✅ Accepts a pending friend request
+     * ✅ Accepts a pending friend request.
      */
-    private void acceptFriendRequest(String friendUsername) {
-        String query = "UPDATE friends SET status = 'Accepted' WHERE user = ? AND friend = ?";
+    private void acceptFriendRequest(String requester) {
+        String currentUser = SessionManager.getUser();
+        String query = "UPDATE friends SET status = 'Accepted' WHERE user = ? AND friend = ? AND status = 'Pending'";
 
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(query)) {
 
-            pstmt.setString(1, SessionManager.getUser());
-            pstmt.setString(2, friendUsername);
-
+            pstmt.setString(1, requester);
+            pstmt.setString(2, currentUser);
             int rowsUpdated = pstmt.executeUpdate();
 
             if (rowsUpdated > 0) {
-                System.out.println("Friend request accepted.");
-                loadFriendList(); // Refresh friend list
+                System.out.println("Friend request from " + requester + " accepted.");
+                loadFriendList(); // ✅ Refresh the friend list after accepting the request
             } else {
                 System.out.println("Failed to accept friend request.");
             }
@@ -303,20 +344,23 @@ public class ChatController {
     }
 
     /**
-     * ✅ Loads pending friend requests
+     * ✅ Loads pending friend requests for the logged-in user.
      */
     private void loadPendingRequests() {
+        String currentUser = SessionManager.getUser();
         String query = "SELECT user FROM friends WHERE friend = ? AND status = 'Pending'";
 
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(query)) {
 
-            pstmt.setString(1, SessionManager.getUser());
+            pstmt.setString(1, currentUser);
             ResultSet rs = pstmt.executeQuery();
 
             while (rs.next()) {
                 String requester = rs.getString("user");
-                System.out.println("Pending request from: " + requester);
+
+                // Show notification or highlight the pending request
+                System.out.println("You have a pending friend request from " + requester);
             }
 
         } catch (SQLException e) {
@@ -325,19 +369,48 @@ public class ChatController {
     }
 
     /**
-     * ✅ Displays a context menu for removing a friend
+     * ✅ Shows a right-click context menu for managing friends.
      */
-    private void showFriendContextMenu(String friendUsername) {
+    private void showFriendContextMenu(ListCell<String> cell, String friend) {
         ContextMenu contextMenu = new ContextMenu();
 
         MenuItem removeItem = new MenuItem("Remove Friend");
-        removeItem.setOnAction(event -> removeFriend(friendUsername));
+        removeItem.setOnAction(event -> removeFriend(friend));
 
         contextMenu.getItems().add(removeItem);
 
-        friendsList.setOnContextMenuRequested(event -> {
-            contextMenu.show(friendsList, event.getScreenX(), event.getScreenY());
-        });
+        // ✅ If the friend request is pending, show an "Accept" option
+        if (friend.contains("(Pending Request)")) {
+            String requester = friend.replace(" (Pending Request)", ""); // Extract username
+            MenuItem acceptItem = new MenuItem("Accept Friend Request");
+            acceptItem.setOnAction(event -> acceptFriendRequest(requester));
+            contextMenu.getItems().add(acceptItem);
+        }
+
+        cell.setContextMenu(contextMenu);
+    }
+
+    /**
+     * ✅ Checks if a friend request is still pending.
+     */
+    private boolean isPendingRequest(String user, String friend) {
+        String query = "SELECT status FROM friends WHERE user = ? AND friend = ?";
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+
+            pstmt.setString(1, user);
+            pstmt.setString(2, friend);
+            ResultSet rs = pstmt.executeQuery();
+
+            if (rs.next()) {
+                return "Pending".equals(rs.getString("status")); // ✅ Return true if request is still pending
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return false;
     }
 
     /**
