@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.geometry.Insets?>  <!-- Import Insets -->
+
+<VBox xmlns:fx="http://javafx.com/fxml/1"
+      fx:controller="com.chatapp.yahoochatapp.PrivateChatController"
+      spacing="10" alignment="CENTER">
+
+    <!-- Set Padding Properly -->
+    <VBox.margin>
+        <Insets top="10" right="10" bottom="10" left="10"/>
+    </VBox.margin>
+
+    <Label text="Private Chat" style="-fx-font-weight: bold;"/>
+
+    <ListView fx:id="privateChatMessages" prefHeight="400"/>
+
+    <HBox spacing="10">
+        <TextArea fx:id="privateMessageField" promptText="Type a message..." wrapText="true" HBox.hgrow="ALWAYS" prefRowCount="2"/>
+        <Button fx:id="sendPrivateMessageButton" text="Send" onAction="#handleSendPrivateMessage"/>
+    </HBox>
+
+</VBox>

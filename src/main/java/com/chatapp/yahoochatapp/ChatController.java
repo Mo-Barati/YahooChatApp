@@ -2,9 +2,12 @@ package com.chatapp.yahoochatapp;
 
 import javafx.animation.PauseTransition;
 import javafx.fxml.FXML;
+import javafx.fxml.FXMLLoader;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
+import javafx.scene.Parent;
+import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
@@ -12,8 +15,10 @@ import javafx.scene.input.ContextMenuEvent;
 import javafx.scene.input.KeyCode;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
+import javafx.stage.Stage;
 import javafx.util.Duration;
 
+import java.io.IOException;
 import java.net.URL;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -83,6 +88,34 @@ public class ChatController {
         addFriendButton.setOnAction(event -> promptAddFriend());
 
         System.out.println("Chat UI initialized successfully!");
+
+        // ✅ Handle double-click event on friend list
+        friendsList.setOnMouseClicked(event -> {
+            if (event.getClickCount() == 2) { // Double-click detected
+                String selectedFriend = friendsList.getSelectionModel().getSelectedItem();
+                if (selectedFriend != null && !selectedFriend.contains("(Pending)") && !selectedFriend.contains("(Requested)")) {
+                    openPrivateChat(selectedFriend);
+                }
+            }
+        });
+    }
+
+    private void openPrivateChat(String friendUsername) {
+        try {
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/chatapp/yahoochatapp/private-chat-view.fxml"));
+            Parent root = loader.load();
+
+            // Get the private chat controller and pass friend info
+            PrivateChatController chatController = loader.getController();
+            chatController.setFriend(friendUsername);
+
+            Stage stage = new Stage();
+            stage.setTitle("Chat with " + friendUsername);
+            stage.setScene(new Scene(root));
+            stage.show();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     /**
