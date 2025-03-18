@@ -1,6 +1,7 @@
 package com.chatapp.yahoochatapp;
 
 import javafx.animation.PauseTransition;
+import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.geometry.Insets;
@@ -81,6 +82,8 @@ public class ChatController {
             }
         });
 
+        ControllerManager.setChatController(this);
+
         loadChatHistory();
         loadFriendList();
         loadPendingRequests(); // ✅ Check for pending friend requests
@@ -89,34 +92,195 @@ public class ChatController {
 
         System.out.println("Chat UI initialized successfully!");
 
-        // ✅ Handle double-click event on friend list
+        // ✅ Handle double-click event on friend list to open private chat
         friendsList.setOnMouseClicked(event -> {
             if (event.getClickCount() == 2) { // Double-click detected
                 String selectedFriend = friendsList.getSelectionModel().getSelectedItem();
-                if (selectedFriend != null && !selectedFriend.contains("(Pending)") && !selectedFriend.contains("(Requested)")) {
-                    openPrivateChat(selectedFriend);
+                if (selectedFriend != null) {
+                    selectedFriend = selectedFriend.replace(" (New)", ""); // ✅ Remove notification tag if present
+                    if (!selectedFriend.contains("(Pending)") && !selectedFriend.contains("(Requested)")) {
+                        openPrivateChat(selectedFriend);
+                    }
+                }
+            }
+        });
+
+        // ✅ Automatically check for new messages and update notifications
+        startNotificationChecker();
+    }
+
+    /**
+     * ✅ Starts a background task to check for new messages and update the friend list.
+     */
+    private void startNotificationChecker() {
+        Thread notificationThread = new Thread(() -> {
+            while (true) {
+                try {
+                    Thread.sleep(5000); // ✅ Check every 5 seconds
+                    Platform.runLater(this::updateFriendListNotifications); // ✅ Now supports 🔵 count
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        });
+        notificationThread.setDaemon(true);
+        notificationThread.start();
+    }
+
+    /**
+     * ✅ Updates the friend list to show an unread message notification for each friend
+     */
+    private void updateFriendListNotifications() {
+        for (int i = 0; i < friendsList.getItems().size(); i++) {
+            String friend = friendsList.getItems().get(i);
+            String friendName = friend.replaceAll(" \\(New\\)| 🔵 \\(\\d+\\)", "").trim(); // ✅ Remove old notifications
+
+            int unreadCount = getUnreadMessageCount(friendName); // ✅ Fetch unread messages count
+
+            if (unreadCount > 0) {
+                friendsList.getItems().set(i, friendName + " 🔵 (" + unreadCount + ")");
+            } else {
+                friendsList.getItems().set(i, friendName); // ✅ Remove notification if no unread messages
+            }
+        }
+    }
+
+    /**
+     * ✅ Updates a specific friend's name in the list to show unread messages
+     */
+    public void updateFriendNotification(String receiver) {
+        Platform.runLater(() -> {
+            if (friendsList == null) {
+                System.err.println("Error: friendsList is not initialized!");
+                return;
+            }
+
+            for (int i = 0; i < friendsList.getItems().size(); i++) {
+                String friend = friendsList.getItems().get(i).trim();
+
+                if (friend.equals(receiver) || friend.startsWith(receiver)) {
+                    int unreadCount = getUnreadMessageCount(receiver); // ✅ Fetch updated count
+                    friendsList.getItems().set(i, receiver + " 🔵 (" + unreadCount + ")");
+                    System.out.println("Updated friend list: " + receiver + " has " + unreadCount + " unread messages.");
+                    return;
                 }
             }
         });
     }
 
-    private void openPrivateChat(String friendUsername) {
+    /**
+     * ✅ Retrieves the number of unread messages for a specific friend
+     */
+    private int getUnreadMessageCount(String friendUsername) {
+        String currentUser = SessionManager.getUser();
+        String query = "SELECT COUNT(*) FROM chat_messages WHERE sender = ? AND receiver = ? AND status = 'Delivered'";
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+            pstmt.setString(1, friendUsername); // Sender
+            pstmt.setString(2, currentUser); // Receiver
+
+            ResultSet rs = pstmt.executeQuery();
+            if (rs.next()) {
+                return rs.getInt(1); // ✅ Return count of unread messages
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        return 0; // Default to no unread messages
+    }
+
+    /**
+     * ✅ Checks if there are unread messages from a friend.
+     */
+    private boolean hasUnreadMessages(String friendUsername) {
+        String query = "SELECT COUNT(*) FROM chat_messages WHERE sender = ? AND receiver = ? AND status != 'Seen'";
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+
+            pstmt.setString(1, friendUsername);
+            pstmt.setString(2, SessionManager.getUser());
+
+            ResultSet rs = pstmt.executeQuery();
+            if (rs.next()) {
+                return rs.getInt(1) > 0; // ✅ Returns true if there are unread messages
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
+    /**
+     * ✅ Opens a private chat window with the selected friend and removes the notification
+     */
+    private void openPrivateChat(String friend) {
         try {
+            friend = friend.replaceAll(" 🔵 \\(\\d+\\)", ""); // ✅ Remove notification count
+
             FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/chatapp/yahoochatapp/private-chat-view.fxml"));
             Parent root = loader.load();
 
-            // Get the private chat controller and pass friend info
-            PrivateChatController chatController = loader.getController();
-            chatController.setFriend(friendUsername);
+            PrivateChatController privateChatController = loader.getController();
+            privateChatController.setFriend(friend);
 
-            Stage stage = new Stage();
-            stage.setTitle("Chat with " + friendUsername);
-            stage.setScene(new Scene(root));
-            stage.show();
+            System.out.println("Calling loadPrivateChat() for: " + friend);
+            privateChatController.loadPrivateChat(friend); // ✅ Load chat messages
+
+            privateChatController.startChatAutoRefresh();  // ✅ Start real-time updates
+
+            Stage chatStage = new Stage();
+            chatStage.setTitle("Chat with " + friend);
+            chatStage.setScene(new Scene(root));
+            chatStage.show();
+
+            privateChatController.setChatStage(chatStage); // ✅ Pass stage reference
+
+            // ✅ Remove notification when chat opens
+            removeFriendNotification(friend);
+
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
+
+    /**
+     * ✅ Removes the unread message notification after opening chat
+     */
+    private void removeFriendNotification(String friend) {
+        Platform.runLater(() -> {
+            for (int i = 0; i < friendsList.getItems().size(); i++) {
+                String listItem = friendsList.getItems().get(i);
+
+                if (listItem.startsWith(friend)) {
+                    friendsList.getItems().set(i, friend); // ✅ Reset to default name (remove 🔵)
+                    markMessagesAsSeen(friend); // ✅ Mark all messages as "Seen" in DB
+                    return;
+                }
+            }
+        });
+    }
+
+    /**
+     * ✅ Marks messages as "Seen" when chat is opened
+     */
+    private void markMessagesAsSeen(String sender) {
+        String currentUser = SessionManager.getUser();
+        String query = "UPDATE chat_messages SET status = 'Seen' WHERE sender = ? AND receiver = ? AND status = 'Delivered'";
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+            pstmt.setString(1, sender);
+            pstmt.setString(2, currentUser);
+            pstmt.executeUpdate();
+            System.out.println("Messages from " + sender + " marked as Seen.");
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
 
     /**
      * ✅ Loads the user's friend list from the database and marks outgoing friend requests.
@@ -473,30 +637,33 @@ public class ChatController {
 
 
     /**
-     * ✅ Loads chat history from the database and displays it in the ListView.
+     * ✅ Loads only general (public) chat history from the database and displays it.
      */
     private void loadChatHistory() {
-        String query = "SELECT id, sender, message, timestamp, status FROM chat_messages ORDER BY id ASC";
+        // ✅ Exclude private messages (messages with a receiver)
+        String query = "SELECT id, sender, message, timestamp, status FROM chat_messages WHERE receiver IS NULL ORDER BY id ASC";
 
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(query);
              ResultSet rs = pstmt.executeQuery()) {
 
-            boolean hasMessages = false; // To track if there are messages
+            boolean hasMessages = false; // Track if there are messages
+
+            chatMessagesList.getItems().clear(); // ✅ Clear existing messages before loading new ones
 
             while (rs.next()) {
                 hasMessages = true; // At least one message exists
 
-                int messageId = rs.getInt("id"); // ✅ Get message ID
+                int messageId = rs.getInt("id");
                 String sender = rs.getString("sender");
                 String message = rs.getString("message");
                 String timestamp = rs.getString("timestamp");
                 String status = rs.getString("status");
 
-                // ✅ FIX: Correct method call (ensure `allowEdit` is a boolean)
+                // ✅ Create UI for public message
                 HBox messageBox = createMessageUI(messageId, sender, message, timestamp, status, true);
 
-                // ✅ Attach context menu with message ID
+                // ✅ Attach context menu (edit/delete) for messages
                 addContextMenu(messageBox, messageId, sender, message,
                         (Label) ((VBox) messageBox.getChildren().get(0)).getChildren().get(0)
                 );
@@ -523,7 +690,6 @@ public class ChatController {
             e.printStackTrace();
         }
     }
-
 
     /**
      * ✅ Marks a message as "Seen" in the database.
@@ -722,6 +888,9 @@ public class ChatController {
             e.printStackTrace();
         }
     }
+
+
+
 
 
     private void simulateBotResponse() {
