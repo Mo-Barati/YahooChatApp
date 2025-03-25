@@ -16,10 +16,12 @@ import javafx.scene.input.ContextMenuEvent;
 import javafx.scene.input.KeyCode;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
+import javafx.scene.shape.Circle;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URL;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -27,7 +29,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import javafx.scene.control.ListView;
 
@@ -641,50 +645,34 @@ public class ChatController {
      * ✅ Loads only general (public) chat history from the database and displays it.
      */
     private void loadChatHistory() {
-        // ✅ Exclude private messages (messages with a receiver)
-        String query = "SELECT id, sender, message, timestamp, status FROM chat_messages WHERE receiver IS NULL ORDER BY id ASC";
+        String query = "SELECT id, sender, content, timestamp FROM public_messages ORDER BY timestamp ASC";
 
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(query);
              ResultSet rs = pstmt.executeQuery()) {
 
-            boolean hasMessages = false; // Track if there are messages
-
-            chatMessagesList.getItems().clear(); // ✅ Clear existing messages before loading new ones
+            boolean hasMessages = false;
+            chatMessagesList.getItems().clear();
 
             while (rs.next()) {
-                hasMessages = true; // At least one message exists
+                hasMessages = true;
 
                 int messageId = rs.getInt("id");
                 String sender = rs.getString("sender");
-                String message = rs.getString("message");
-                String timestamp = rs.getString("timestamp");
-                String status = rs.getString("status");
+                String content = rs.getString("content");
+                String timestamp = rs.getTimestamp("timestamp").toLocalDateTime()
+                        .format(DateTimeFormatter.ofPattern("HH:mm"));
 
-                // ✅ Create UI for public message
-                HBox messageBox = createMessageUI(messageId, sender, message, timestamp, status, true);
-
-                // ✅ Attach context menu (edit/delete) for messages
-                addContextMenu(messageBox, messageId, sender, message,
-                        (Label) ((VBox) messageBox.getChildren().get(0)).getChildren().get(0)
-                );
-
+                HBox messageBox = createMessageUI(messageId, sender, content, timestamp, "", false);
                 chatMessagesList.getItems().add(messageBox);
-
-                // ✅ If message is "Delivered", update it to "Seen"
-                if (!"Seen".equals(status)) {
-                    markMessageAsSeen(messageId);
-                }
             }
 
-            // ✅ If no messages exist, show a placeholder
             if (!hasMessages) {
                 Label placeholderLabel = new Label("No messages yet...");
                 placeholderLabel.setStyle("-fx-font-size: 14px; -fx-text-fill: gray; -fx-padding: 20px;");
                 chatMessagesList.getItems().add(new HBox(placeholderLabel));
             }
 
-            // ✅ Auto-scroll to the latest message
             chatMessagesList.scrollTo(chatMessagesList.getItems().size() - 1);
 
         } catch (SQLException e) {
@@ -764,41 +752,170 @@ public class ChatController {
      * ✅ Creates the UI for each message and attaches the context menu
      */
     private HBox createMessageUI(int messageId, String sender, String message, String timestamp, String status, boolean allowEdit) {
+        // 🖼 Load profile image
+        ImageView profileView = new ImageView();
+        profileView.setFitWidth(30);
+        profileView.setFitHeight(30);
+        profileView.setPreserveRatio(true);
+
+        String imagePath = getUserProfileImagePath(sender);
+        if (imagePath != null && !imagePath.isEmpty()) {
+            profileView.setImage(new Image(imagePath));
+            // Make it circular
+            Circle clip = new Circle(15, 15, 15);
+            profileView.setClip(clip);
+        } else {
+            System.out.println("⚠️ No profile image found for user: " + sender);
+            profileView.setVisible(false);
+            profileView.setManaged(false);
+        }
+
+        // 👤 Sender label
+        Label senderLabel = new Label(sender + ":");
+        senderLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #333;");
+
+        // 🧩 Combine profile and sender name
+        HBox headerBox = new HBox(profileView, senderLabel);
+        headerBox.setSpacing(10);
+        headerBox.setAlignment(Pos.CENTER_LEFT);
+
+        // 💬 Message content
         Label messageLabel = new Label(message);
         messageLabel.setWrapText(true);
         messageLabel.setMaxWidth(250);
 
+        // ⏰ Time label
         Label timeLabel = new Label(timestamp);
         timeLabel.setStyle("-fx-font-size: 10px; -fx-text-fill: gray;");
-        timeLabel.setAlignment(Pos.BOTTOM_RIGHT);
 
-        Label statusLabel = new Label(status);
-        statusLabel.setStyle("-fx-font-size: 10px; -fx-text-fill: gray;");
+        // 👍 Like + 💬 Comment Buttons
+        Button likeBtn = new Button("👍");
+        likeBtn.setOnAction(e -> handleLike(messageId));
 
-        VBox messageContainer = new VBox(messageLabel, timeLabel, statusLabel);
+        int likeCount = getLikeCount(messageId);
+        Label likeCountLabel = new Label(String.valueOf(likeCount));
+        VBox likeBox = new VBox(likeBtn, likeCountLabel);
+        likeBox.setAlignment(Pos.CENTER);
+
+        Button commentBtn = new Button("💬");
+        commentBtn.setOnAction(e -> promptComment(messageId));
+
+        HBox interactionBar = new HBox(likeBox, commentBtn);
+        interactionBar.setSpacing(10);
+
+        // 🗨️ Comments
+        List<Label> comments = getComments(messageId);
+        VBox commentBox = new VBox();
+        commentBox.setSpacing(3);
+        commentBox.setPadding(new Insets(5, 0, 0, 10));
+        if (!comments.isEmpty()) commentBox.getChildren().addAll(comments);
+
+        // 📦 Message container with everything
+        VBox messageContainer = new VBox(headerBox, messageLabel, timeLabel, interactionBar, commentBox);
+        messageContainer.setSpacing(5);
+
+        // 👥 Final message bubble
         HBox messageBox = new HBox(messageContainer);
-
-        if ("Bot".equals(sender)) {
-            // Bot messages (align left)
-            messageLabel.setStyle("-fx-background-color: #E5E5EA; -fx-text-fill: black; -fx-padding: 10px; -fx-background-radius: 10;");
-            messageContainer.setAlignment(Pos.BOTTOM_LEFT);
-            messageBox.setAlignment(Pos.CENTER_LEFT);
-            messageBox.setPadding(new Insets(5, 50, 5, 10));
-        } else {
-            // User messages (align right)
-            messageLabel.setStyle("-fx-background-color: #0078FF; -fx-text-fill: white; -fx-padding: 10px; -fx-background-radius: 10;");
-            messageContainer.setAlignment(Pos.BOTTOM_RIGHT);
-            messageBox.setAlignment(Pos.CENTER_RIGHT);
-            messageBox.setPadding(new Insets(5, 10, 5, 50));
-
-            if (allowEdit) {
-                // ✅ Attach context menu with messageId
-                addContextMenu(messageBox, messageId, sender, message, messageLabel);
-            }
-        }
+        messageBox.setPadding(new Insets(5, 10, 5, 10));
+        messageBox.setAlignment(sender.equals(SessionManager.getUser()) ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT);
 
         return messageBox;
     }
+
+    private void handleLike(int messageId) {
+        String sender = SessionManager.getUser();
+
+        String query = "INSERT INTO message_interactions (message_id, user, type) VALUES (?, ?, 'like')";
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+
+            pstmt.setInt(1, messageId);
+            pstmt.setString(2, sender);
+            pstmt.executeUpdate();
+
+            System.out.println("👍 Liked message " + messageId);
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private int getLikeCount(int messageId) {
+        String query = "SELECT COUNT(*) FROM message_interactions WHERE message_id = ? AND type = 'like'";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+            pstmt.setInt(1, messageId);
+            ResultSet rs = pstmt.executeQuery();
+            if (rs.next()) return rs.getInt(1);
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return 0;
+    }
+
+    private void promptComment(int messageId) {
+        TextInputDialog dialog = new TextInputDialog();
+        dialog.setTitle("Add Comment");
+        dialog.setHeaderText("Write your comment:");
+        dialog.setContentText("Comment:");
+
+        dialog.showAndWait().ifPresent(comment -> {
+            if (!comment.trim().isEmpty()) {
+                saveComment(messageId, comment);
+            }
+        });
+    }
+
+    private void saveComment(int messageId, String commentText) {
+        String sender = SessionManager.getUser();
+
+        String query = "INSERT INTO message_interactions (message_id, user, type, comment_text) VALUES (?, ?, 'comment', ?)";
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+
+            pstmt.setInt(1, messageId);
+            pstmt.setString(2, sender);
+            pstmt.setString(3, commentText);
+            pstmt.executeUpdate();
+
+            System.out.println("💬 Comment added to message " + messageId);
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private List<Label> getComments(int messageId) {
+        List<Label> commentLabels = new ArrayList<>();
+        String query = "SELECT user, comment_text FROM message_interactions WHERE message_id = ? AND type = 'comment' ORDER BY timestamp ASC";
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+
+            pstmt.setInt(1, messageId);
+            ResultSet rs = pstmt.executeQuery();
+
+            while (rs.next()) {
+                String user = rs.getString("user");
+                String text = rs.getString("comment_text");
+
+                Label comment = new Label(user + ": " + text);
+                comment.setStyle("-fx-font-size: 12px; -fx-text-fill: #555;");
+                comment.setWrapText(true);
+                comment.setMaxWidth(220);
+                commentLabels.add(comment);
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        return commentLabels;
+    }
+
+
 
 
     /**
@@ -848,20 +965,14 @@ public class ChatController {
      * Saves a chat message to the database.
      */
     private void saveMessageToDatabase(String sender, String message) {
-        String query = "INSERT INTO chat_messages (sender, message, status) VALUES (?, ?, 'Sent')";
+        String query = "INSERT INTO public_messages (sender, content) VALUES (?, ?)";
 
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(query)) {
 
             pstmt.setString(1, sender);
             pstmt.setString(2, message);
-
-            int rowsInserted = pstmt.executeUpdate();
-            if (rowsInserted > 0) {
-                System.out.println("Message saved successfully.");
-            } else {
-                System.out.println("Failed to save message.");
-            }
+            pstmt.executeUpdate();
 
         } catch (SQLException e) {
             e.printStackTrace();
@@ -888,6 +999,26 @@ public class ChatController {
         } catch (SQLException e) {
             e.printStackTrace();
         }
+    }
+
+    private String getUserProfileImagePath(String username) {
+        String query = "SELECT profile_picture FROM users WHERE username = ?";
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+
+            pstmt.setString(1, username);
+            ResultSet rs = pstmt.executeQuery();
+
+            if (rs.next()) {
+                return rs.getString("profile_picture"); // It’s a full URI like "file:/..."
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        return null;
     }
 
 
