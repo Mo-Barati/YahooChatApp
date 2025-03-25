@@ -1,0 +1,34 @@
+/* General ListView styles */
+.list-view {
+    -fx-background-color: white;
+    -fx-font-family: "Segoe UI Emoji", "Segoe UI Symbol", "Arial Unicode MS", sans-serif;
+    -fx-font-size: 16px;
+    -fx-padding: 10px;
+}
+
+/* Base message cell style */
+.list-cell {
+    -fx-padding: 10px;
+    -fx-background-radius: 10px;
+    -fx-border-radius: 10px;
+    -fx-background-color: #f1f1f1;
+    -fx-text-fill: #333;
+    -fx-wrap-text: true;
+}
+
+/* Remove highlight on select */
+.list-cell:filled:selected {
+    -fx-background-color: transparent;
+}
+
+/* Custom class: Your messages */
+.my-message {
+    -fx-background-color: #DCF8C6; /* Light green like WhatsApp */
+    -fx-text-fill: #000;
+}
+
+/* Custom class: Friend's messages */
+.friend-message {
+    -fx-background-color: #EDEDED;
+    -fx-text-fill: #000;
+}

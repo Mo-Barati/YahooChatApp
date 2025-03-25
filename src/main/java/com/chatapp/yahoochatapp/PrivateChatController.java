@@ -1,12 +1,20 @@
+
 package com.chatapp.yahoochatapp;
 
 import javafx.application.Platform;
+import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
-import javafx.scene.control.Button;
-import javafx.scene.control.ListView;
-import javafx.scene.control.TextArea;
+import javafx.geometry.Insets;
+import javafx.geometry.Pos;
+import javafx.scene.Node;
+import javafx.scene.Scene;
+import javafx.scene.control.*;
+import javafx.scene.layout.HBox;
+import javafx.scene.text.Font;
+import javafx.scene.web.WebEngine;
 import javafx.stage.Stage;
-
+import javafx.scene.web.WebView;
+import java.net.URL;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -16,37 +24,49 @@ import java.util.List;
 
 public class PrivateChatController {
 
-    @FXML private ListView<String> privateChatMessages;
+    @FXML private ListView<Node> privateChatListView;
     @FXML private TextArea privateMessageField;
     @FXML private Button sendPrivateMessageButton;
-    @FXML
-    private ListView<String> friendsList; // ✅ Ensure this exists in your class
-
+    @FXML private Button emojiButton;
 
     private String currentUser;
     private String friendUsername;
-    private Stage chatStage; // ✅ Store reference to chat window stage
+    private Stage chatStage;
+    private Thread chatRefreshThread;
 
     public void setChatStage(Stage stage) {
         this.chatStage = stage;
     }
-
 
     public void setFriend(String friend) {
         this.friendUsername = friend;
         loadPrivateChat(friendUsername);
     }
 
+    @FXML
+    public void initialize() {
+        Platform.runLater(() -> {
+            try {
+                privateChatListView.setFocusTraversable(false); // optional: avoid auto-focus
+                privateChatListView.setStyle("-fx-font-size: 16px;"); // readable font size
+                System.out.println("✅ ListView initialized for private chat");
+            } catch (Exception e) {
+                System.err.println("❌ Error initializing ListView: " + e.getMessage());
+                e.printStackTrace();
+            }
+        });
+    }
+
     public void loadPrivateChat(String friendUsername) {
         String currentUser = SessionManager.getUser();
-        friendUsername = friendUsername.replaceAll(" 🔵 \\(\\d+\\)", ""); // ✅ Remove badge before fetching
+        friendUsername = friendUsername.replaceAll("\\(\\d+\\)", "");
 
         System.out.println("Loading chat between " + currentUser + " and " + friendUsername);
 
         String query = "SELECT sender, message FROM chat_messages " +
                 "WHERE (sender = ? AND receiver = ?) OR (sender = ? AND receiver = ?) ORDER BY id ASC";
 
-        List<String> messages = new ArrayList<>();
+        List<HBox> messageBubbles = new ArrayList<>();
 
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(query)) {
@@ -61,8 +81,23 @@ public class PrivateChatController {
                     String sender = rs.getString("sender");
                     String message = rs.getString("message");
 
-                    System.out.println("Fetched message (before UI update): " + sender + " -> " + message);
-                    messages.add(sender + ": " + message);
+                    Label label = new Label(sender + ": " + message);
+                    label.setWrapText(true);
+                    label.setMaxWidth(300);
+                    label.setPadding(new Insets(8));
+                    label.setStyle(
+                            "-fx-background-color: " + (sender.equals(currentUser) ? "#DCF8C6" : "#FFFFFF") + ";" +
+                                    "-fx-background-radius: 10;" +
+                                    "-fx-border-radius: 10;" +
+                                    "-fx-font-size: 14px;" +
+                                    "-fx-text-fill: black;"
+                    );
+
+                    HBox hBox = new HBox(label);
+                    hBox.setAlignment(sender.equals(currentUser) ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT);
+                    hBox.setPadding(new Insets(4, 10, 4, 10));
+
+                    messageBubbles.add(hBox);
                 }
             }
 
@@ -70,111 +105,46 @@ public class PrivateChatController {
             e.printStackTrace();
         }
 
-        // ✅ Ensure UI updates correctly
-        Platform.runLater(() -> {
-            System.out.println("Updating UI with messages..."); // Debugging UI update
-
-            privateChatMessages.getItems().setAll(messages); // ✅ Force ListView update
-            privateChatMessages.refresh(); // ✅ Ensure UI refresh
-        });
+        Platform.runLater(() -> privateChatListView.getItems().setAll(messageBubbles));
     }
 
     @FXML
     private void handleSendPrivateMessage() {
         String message = privateMessageField.getText().trim();
-        if (message.isEmpty()) {
-            System.err.println("Cannot send an empty message.");
-            return;
-        }
+        if (message.isEmpty()) return;
 
-        // ✅ Ensure sender and receiver are correctly assigned
-        String sender = SessionManager.getUser(); // Ensure this method returns the correct username
-        if (sender == null) {
-            System.err.println("Error: Current user (sender) is null!");
-            return;
-        }
-
-        if (friendUsername == null) {
-            System.err.println("Error: Friend username (receiver) is null!");
-            return;
-        }
-
-        // ✅ Save message in database
+        String sender = SessionManager.getUser();
         savePrivateMessage(sender, friendUsername, message);
 
-        // ✅ Display message in chat
-        privateChatMessages.getItems().add(sender + ": " + message);
+        // Update ListView directly
+        Platform.runLater(() -> {
+            Label messageLabel = new Label(sender + ": " + message);
+            messageLabel.setWrapText(true);
+            messageLabel.setMaxWidth(300);
+            messageLabel.setPadding(new Insets(8));
+            messageLabel.setStyle("-fx-background-color: #DCF8C6; -fx-background-radius: 10; -fx-border-radius: 10; -fx-font-size: 14px; -fx-text-fill: black;");
 
-        // ✅ Clear message field after sending
-        privateMessageField.clear();
+            HBox bubble = new HBox(messageLabel);
+            bubble.setAlignment(Pos.CENTER_RIGHT);
+            bubble.setPadding(new Insets(4, 10, 4, 10));
+
+            privateChatListView.getItems().add(bubble);
+            privateMessageField.clear();
+        });
     }
 
-    /**
-     * ✅ Saves a private message to the database and notifies the receiver
-     */
     private void savePrivateMessage(String sender, String receiver, String message) {
-        if (sender == null || receiver == null || message == null || message.trim().isEmpty()) {
-            System.err.println("Error: Missing sender, receiver, or message!");
-            return;
-        }
-
         String query = "INSERT INTO chat_messages (sender, receiver, message, status) VALUES (?, ?, ?, 'Delivered')";
-
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(query)) {
-
             pstmt.setString(1, sender);
             pstmt.setString(2, receiver);
             pstmt.setString(3, message);
-
-            int rowsInserted = pstmt.executeUpdate();
-
-            if (rowsInserted > 0) {
-                System.out.println("Message saved successfully: " + sender + " -> " + receiver);
-
-                // ✅ Get the ChatController instance from ControllerManager
-                ChatController chatController = ControllerManager.getChatController();
-                if (chatController != null) {
-                    Platform.runLater(() -> chatController.updateFriendNotification(receiver)); // ✅ Notify receiver
-                } else {
-                    System.err.println("Error: ChatController instance is null!");
-                }
-            }
-
+            pstmt.executeUpdate();
         } catch (SQLException e) {
             e.printStackTrace();
         }
     }
-
-
-    private void updateFriendNotification(String receiver) {
-        Platform.runLater(() -> {
-            if (friendsList == null) {
-                System.err.println("Error: friendsList is not initialized!");
-                return;
-            }
-
-            for (int i = 0; i < friendsList.getItems().size(); i++) {
-                String friend = friendsList.getItems().get(i);
-                if (friend.contains(receiver)) {
-                    // ✅ Extract existing notification count
-                    int unreadCount = 1;
-                    if (friend.matches(".*\\(\\d+\\)$")) {
-                        unreadCount = Integer.parseInt(friend.replaceAll("[^0-9]", "")) + 1;
-                    }
-
-                    // ✅ Update with new count in a blue badge
-                    friendsList.getItems().set(i, receiver + " 🔵 (" + unreadCount + ")");
-                    return; // Stop after updating
-                }
-            }
-        });
-    }
-
-    /**
-     * ✅ Starts auto-refresh for real-time chat updates
-     */
-    private Thread chatRefreshThread;
 
     public void startChatAutoRefresh() {
         if (chatRefreshThread != null && chatRefreshThread.isAlive()) {
@@ -182,31 +152,32 @@ public class PrivateChatController {
         }
 
         chatRefreshThread = new Thread(() -> {
-            while (chatStage != null && chatStage.isShowing()) { // ✅ Stops when chat window is closed
+            while (chatStage != null && chatStage.isShowing()) {
                 try {
                     Thread.sleep(3000); // ✅ Refresh every 3 seconds
-                    Platform.runLater(() -> loadPrivateChat(friendUsername)); // ✅ Update chat in UI thread
+                    Platform.runLater(() -> loadPrivateChat(friendUsername)); // ✅ Refresh chat in UI
                 } catch (InterruptedException e) {
                     e.printStackTrace();
-                    break; // ✅ Exit loop if interrupted
+                    break;
                 }
             }
         });
 
-        chatRefreshThread.setDaemon(true); // ✅ Stops thread when app closes
+        chatRefreshThread.setDaemon(true);
         chatRefreshThread.start();
     }
 
-    /**
-     * ✅ Stops the auto-refresh thread when the chat window is closed.
-     */
-    public void stopChatAutoRefresh() {
-        if (chatRefreshThread != null && chatRefreshThread.isAlive()) {
-            chatRefreshThread.interrupt(); // ✅ Stop the thread
-            System.out.println("Chat auto-refresh stopped.");
+    @FXML
+    private void showEmojiPicker(ActionEvent event) {
+        ContextMenu emojiMenu = new ContextMenu();
+        String[] emojis = {"😀", "😂", "😍", "👍", "🔥", "❤️", "😊", "😎", "🤔", "🎉"};
+        for (String emoji : emojis) {
+            MenuItem emojiItem = new MenuItem(emoji);
+            emojiItem.setStyle("-fx-font-size: 16px;");
+            emojiItem.setOnAction(e -> privateMessageField.appendText(emoji));
+            emojiMenu.getItems().add(emojiItem);
         }
+        emojiMenu.show(emojiButton, emojiButton.getScene().getWindow().getX() + emojiButton.getLayoutX(),
+                emojiButton.getScene().getWindow().getY() + emojiButton.getLayoutY() + emojiButton.getHeight());
     }
-
-
-
 }

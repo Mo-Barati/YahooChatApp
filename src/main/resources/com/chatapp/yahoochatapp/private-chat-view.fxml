@@ -2,10 +2,12 @@
 
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
+<?import javafx.scene.web.WebView?>
 <?import javafx.geometry.Insets?>  <!-- Import Insets -->
 
 <VBox xmlns:fx="http://javafx.com/fxml/1"
       fx:controller="com.chatapp.yahoochatapp.PrivateChatController"
+      stylesheets="@css/styles.css"
       spacing="10" alignment="CENTER">
 
     <!-- Set Padding Properly -->
@@ -15,10 +17,19 @@
 
     <Label text="Private Chat" style="-fx-font-weight: bold;"/>
 
-    <ListView fx:id="privateChatMessages" prefHeight="400"/>
+    <ListView fx:id="privateChatListView" prefHeight="400.0" VBox.vgrow="ALWAYS" />
+
+
 
     <HBox spacing="10">
         <TextArea fx:id="privateMessageField" promptText="Type a message..." wrapText="true" HBox.hgrow="ALWAYS" prefRowCount="2"/>
+
+        <!-- Emoji Button -->
+        <Button fx:id="emojiButton" text="😀" onAction="#showEmojiPicker"/>
+
+        <!-- WebView to Display Colored Emoji -->
+<!--        <WebView fx:id="emojiWebView" prefHeight="30" prefWidth="200"/>-->
+
         <Button fx:id="sendPrivateMessageButton" text="Send" onAction="#handleSendPrivateMessage"/>
     </HBox>
 
