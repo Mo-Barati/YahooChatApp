@@ -635,7 +635,7 @@ public class ChatController {
         PauseTransition delay = new PauseTransition(Duration.seconds(1));
         delay.setOnFinished(event -> {
             chatMessagesList.getItems().remove(typingBox);
-            simulateBotResponse(); // Trigger the bot response after the delay
+//            simulateBotResponse(); // Trigger the bot response after the delay
         });
         delay.play();
     }
@@ -788,53 +788,89 @@ public class ChatController {
         Label timeLabel = new Label(timestamp);
         timeLabel.setStyle("-fx-font-size: 10px; -fx-text-fill: gray;");
 
-        // 👍 Like + 💬 Comment Buttons
+        String currentUser = SessionManager.getUser();
+
+        // 👍 Like button + count (with styling if already liked)
         Button likeBtn = new Button("👍");
-        likeBtn.setOnAction(e -> handleLike(messageId));
+        if (hasUserLiked(messageId, currentUser)) {
+            likeBtn.setStyle("-fx-background-color: #cce5ff;"); // Light blue if liked
+        } else {
+            likeBtn.setStyle("-fx-background-color: transparent;");
+        }
+        likeBtn.setOnAction(e -> {
+            handleLike(messageId);
+            reloadMessageBubble(messageId); // refresh to update style and count
+        });
 
         int likeCount = getLikeCount(messageId);
         Label likeCountLabel = new Label(String.valueOf(likeCount));
         VBox likeBox = new VBox(likeBtn, likeCountLabel);
         likeBox.setAlignment(Pos.CENTER);
 
+        // 💬 Comment button + count
         Button commentBtn = new Button("💬");
         commentBtn.setOnAction(e -> promptComment(messageId));
 
-        HBox interactionBar = new HBox(likeBox, commentBtn);
+        int commentCount = getCommentCount(messageId);
+        Label commentCountLabel = new Label(String.valueOf(commentCount));
+        VBox commentBoxButton = new VBox(commentBtn, commentCountLabel);
+        commentBoxButton.setAlignment(Pos.CENTER);
+
+        HBox interactionBar = new HBox(likeBox, commentBoxButton);
         interactionBar.setSpacing(10);
 
-        // 🗨️ Comments
+        // 🗨️ Comments below message
         List<Label> comments = getComments(messageId);
         VBox commentBox = new VBox();
         commentBox.setSpacing(3);
         commentBox.setPadding(new Insets(5, 0, 0, 10));
         if (!comments.isEmpty()) commentBox.getChildren().addAll(comments);
 
-        // 📦 Message container with everything
+        // 📦 Main message container
         VBox messageContainer = new VBox(headerBox, messageLabel, timeLabel, interactionBar, commentBox);
         messageContainer.setSpacing(5);
 
         // 👥 Final message bubble
         HBox messageBox = new HBox(messageContainer);
         messageBox.setPadding(new Insets(5, 10, 5, 10));
-        messageBox.setAlignment(sender.equals(SessionManager.getUser()) ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT);
+        messageBox.setAlignment(sender.equals(currentUser) ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT);
+        messageBox.getProperties().put("messageId", messageId); // Store messageId
+
+        addPublicMessageContextMenu(messageBox, messageId, sender, messageLabel);
 
         return messageBox;
     }
 
     private void handleLike(int messageId) {
-        String sender = SessionManager.getUser();
+        String currentUser = SessionManager.getUser();
 
-        String query = "INSERT INTO message_interactions (message_id, user, type) VALUES (?, ?, 'like')";
+        // ✅ Check if this user already liked this message
+        String checkQuery = "SELECT * FROM message_interactions WHERE message_id = ? AND user = ? AND type = 'like'";
 
         try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(query)) {
+             PreparedStatement checkStmt = conn.prepareStatement(checkQuery)) {
 
-            pstmt.setInt(1, messageId);
-            pstmt.setString(2, sender);
-            pstmt.executeUpdate();
+            checkStmt.setInt(1, messageId);
+            checkStmt.setString(2, currentUser);
+            ResultSet rs = checkStmt.executeQuery();
 
-            System.out.println("👍 Liked message " + messageId);
+            if (rs.next()) {
+                // Already liked – prevent multiple likes
+                System.out.println("User already liked this message.");
+                return;
+            }
+
+            // ✅ Insert new like record
+            String insertQuery = "INSERT INTO message_interactions (message_id, user, type) VALUES (?, ?, 'like')";
+            try (PreparedStatement insertStmt = conn.prepareStatement(insertQuery)) {
+                insertStmt.setInt(1, messageId);
+                insertStmt.setString(2, currentUser);
+                insertStmt.executeUpdate();
+                System.out.println("Message liked successfully.");
+            }
+
+            // ✅ Refresh UI (reload chat messages)
+            loadChatHistory();
 
         } catch (SQLException e) {
             e.printStackTrace();
@@ -862,14 +898,101 @@ public class ChatController {
 
         dialog.showAndWait().ifPresent(comment -> {
             if (!comment.trim().isEmpty()) {
-                saveComment(messageId, comment);
+                saveComment(messageId, SessionManager.getUser(), comment);
+
+                // ✅ Fix: refresh safely on UI thread
+                Platform.runLater(() -> {
+                    reloadMessageBubble(messageId);
+                });
             }
         });
     }
 
-    private void saveComment(int messageId, String commentText) {
-        String sender = SessionManager.getUser();
+    private void reloadMessageBubble(int messageId) {
+        // Find the message in the ListView
+        for (int i = 0; i < chatMessagesList.getItems().size(); i++) {
+            Node node = chatMessagesList.getItems().get(i);
 
+            if (node instanceof HBox) {
+                HBox messageBox = (HBox) node;
+
+                // Get the messageId stored in properties
+                Integer storedId = (Integer) messageBox.getProperties().get("messageId");
+                if (storedId != null && storedId == messageId) {
+
+                    // Preserve alignment (e.g., CENTER_RIGHT for current user)
+                    Pos oldAlignment = messageBox.getAlignment();
+
+                    // Create updated message bubble
+                    HBox updated = createMessageUI(
+                            messageId,
+                            getSenderByMessageId(messageId),
+                            getMessageById(messageId),
+                            getTimestampById(messageId),
+                            "Seen",
+                            true
+                    );
+
+                    // Restore original alignment
+                    updated.setAlignment(oldAlignment);
+
+                    // Store messageId again
+                    updated.getProperties().put("messageId", messageId);
+
+                    // Replace the message in the ListView
+                    chatMessagesList.getItems().set(i, updated);
+                    return;
+                }
+            }
+        }
+    }
+
+    private String getSenderByMessageId(int messageId) {
+        String query = "SELECT sender FROM public_messages WHERE id = ?";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(query)) {
+
+            stmt.setInt(1, messageId);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                return rs.getString("sender");
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return "Unknown"; // fallback
+    }
+
+    private String getMessageById(int messageId) {
+        String query = "SELECT content FROM public_messages WHERE id = ?";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(query)) {
+            stmt.setInt(1, messageId);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                return rs.getString("content");
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return "[Message not found]";
+    }
+
+    private String getTimestampById(int messageId) {
+        String query = "SELECT timestamp FROM chat_messages WHERE id = ?";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+            pstmt.setInt(1, messageId);
+            ResultSet rs = pstmt.executeQuery();
+            if (rs.next()) return rs.getString("timestamp");
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return "";
+    }
+
+    private void saveComment(int messageId, String sender, String commentText) {
         String query = "INSERT INTO message_interactions (message_id, user, type, comment_text) VALUES (?, ?, 'comment', ?)";
 
         try (Connection conn = DatabaseConnection.getConnection();
@@ -878,9 +1001,8 @@ public class ChatController {
             pstmt.setInt(1, messageId);
             pstmt.setString(2, sender);
             pstmt.setString(3, commentText);
-            pstmt.executeUpdate();
 
-            System.out.println("💬 Comment added to message " + messageId);
+            pstmt.executeUpdate();
 
         } catch (SQLException e) {
             e.printStackTrace();
@@ -913,6 +1035,79 @@ public class ChatController {
         }
 
         return commentLabels;
+    }
+
+    private int getCommentCount(int messageId) {
+        String query = "SELECT COUNT(*) FROM message_interactions WHERE message_id = ? AND type = 'comment'";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+
+            pstmt.setInt(1, messageId);
+            ResultSet rs = pstmt.executeQuery();
+            if (rs.next()) {
+                return rs.getInt(1);
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return 0;
+    }
+
+    private void addPublicMessageContextMenu(HBox messageBox, int messageId, String sender, Label messageLabel) {
+        // Only allow the logged-in user to edit/delete their own messages
+        if (!sender.equals(SessionManager.getUser())) return;
+
+        ContextMenu contextMenu = new ContextMenu();
+
+        // ✏️ Edit
+        MenuItem editItem = new MenuItem("Edit");
+        editItem.setOnAction(e -> {
+            TextInputDialog dialog = new TextInputDialog(messageLabel.getText());
+            dialog.setTitle("Edit Message");
+            dialog.setHeaderText("Edit your message:");
+            dialog.setContentText("Message:");
+
+            dialog.showAndWait().ifPresent(newText -> {
+                if (!newText.trim().isEmpty()) {
+                    messageLabel.setText(newText);
+                    updatePublicMessageInDatabase(messageId, newText);
+                }
+            });
+        });
+
+        // 🗑 Delete
+        MenuItem deleteItem = new MenuItem("Delete");
+        deleteItem.setOnAction(e -> {
+            deletePublicMessageFromDatabase(messageId);
+            chatMessagesList.getItems().remove(messageBox);
+        });
+
+        contextMenu.getItems().addAll(editItem, deleteItem);
+        messageBox.setOnContextMenuRequested(e -> contextMenu.show(messageBox, e.getScreenX(), e.getScreenY()));
+    }
+
+    private void updatePublicMessageInDatabase(int messageId, String newMessage) {
+        String sql = "UPDATE public_messages SET content = ? WHERE id = ?";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, newMessage);
+            pstmt.setInt(2, messageId);
+            pstmt.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void deletePublicMessageFromDatabase(int messageId) {
+        String sql = "DELETE FROM public_messages WHERE id = ?";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, messageId);
+            pstmt.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
     }
 
 
@@ -1021,50 +1216,69 @@ public class ChatController {
         return null;
     }
 
+    private boolean hasUserLiked(int messageId, String username) {
+        String query = "SELECT COUNT(*) FROM message_interactions WHERE message_id = ? AND user = ? AND type = 'like'";
 
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
 
+            pstmt.setInt(1, messageId);
+            pstmt.setString(2, username);
+            ResultSet rs = pstmt.executeQuery();
+            if (rs.next()) {
+                return rs.getInt(1) > 0;
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
 
-
-    private void simulateBotResponse() {
-        PauseTransition delay = new PauseTransition(Duration.seconds(1));
-        delay.setOnFinished(event -> {
-            // Get current timestamp
-            LocalDateTime now = LocalDateTime.now();
-            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("HH:mm");
-            String timestamp = now.format(formatter);
-
-            // Create bot message
-            String botMessage = "Hi there! 😊";
-            Label botLabel = new Label(botMessage);
-            botLabel.setStyle("-fx-background-color: #E5E5EA; -fx-text-fill: black; -fx-padding: 10px; -fx-background-radius: 10;");
-            botLabel.setWrapText(true);
-            botLabel.setMaxWidth(250);
-
-            // Create timestamp label
-            Label timeLabel = new Label(timestamp);
-            timeLabel.setStyle("-fx-font-size: 10px; -fx-text-fill: gray;");
-            timeLabel.setAlignment(Pos.BOTTOM_RIGHT);
-
-            // Place bot message and time in a VBox
-            VBox botContainer = new VBox(botLabel, timeLabel);
-            botContainer.setAlignment(Pos.BOTTOM_LEFT);
-
-            // Place VBox in HBox for alignment
-            HBox botMessageBox = new HBox(botContainer);
-            botMessageBox.setAlignment(Pos.CENTER_LEFT);
-            botMessageBox.setPadding(new Insets(5, 50, 5, 10));
-
-            // Add bot response to ListView
-            chatMessagesList.getItems().add(botMessageBox);
-
-            // ✅ Save bot message to database
-            saveMessageToDatabase("Bot", botMessage);
-
-            // ✅ Auto-scroll to latest message
-            chatMessagesList.scrollTo(chatMessagesList.getItems().size() - 1);
-        });
-        delay.play();
+        return false;
     }
+
+
+
+
+
+//    private void simulateBotResponse() {
+//        PauseTransition delay = new PauseTransition(Duration.seconds(1));
+//        delay.setOnFinished(event -> {
+//            // Get current timestamp
+//            LocalDateTime now = LocalDateTime.now();
+//            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("HH:mm");
+//            String timestamp = now.format(formatter);
+//
+//            // Create bot message
+//            String botMessage = "Hi there! 😊";
+//            Label botLabel = new Label(botMessage);
+//            botLabel.setStyle("-fx-background-color: #E5E5EA; -fx-text-fill: black; -fx-padding: 10px; -fx-background-radius: 10;");
+//            botLabel.setWrapText(true);
+//            botLabel.setMaxWidth(250);
+//
+//            // Create timestamp label
+//            Label timeLabel = new Label(timestamp);
+//            timeLabel.setStyle("-fx-font-size: 10px; -fx-text-fill: gray;");
+//            timeLabel.setAlignment(Pos.BOTTOM_RIGHT);
+//
+//            // Place bot message and time in a VBox
+//            VBox botContainer = new VBox(botLabel, timeLabel);
+//            botContainer.setAlignment(Pos.BOTTOM_LEFT);
+//
+//            // Place VBox in HBox for alignment
+//            HBox botMessageBox = new HBox(botContainer);
+//            botMessageBox.setAlignment(Pos.CENTER_LEFT);
+//            botMessageBox.setPadding(new Insets(5, 50, 5, 10));
+//
+//            // Add bot response to ListView
+//            chatMessagesList.getItems().add(botMessageBox);
+//
+//            // ✅ Save bot message to database
+//            saveMessageToDatabase("Bot", botMessage);
+//
+//            // ✅ Auto-scroll to latest message
+//            chatMessagesList.scrollTo(chatMessagesList.getItems().size() - 1);
+//        });
+//        delay.play();
+//    }
 
 
 
